@@ -1,6 +1,25 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/common.sh"
 
+ARIA2_CONF_DIR
+ARIA2_SESSION
+ARIA2_DOWNLOAD_DIR
+ARIA2_USER
+ARIA2_GROUP
+
+# Default paths for aria2
+ARIA2_CONF_DIR="${ARIA2_CONF_DIR:-/etc/aria2}"
+ARIA2_CONF="${ARIA2_CONF:-${ARIA2_CONF_DIR}/aria2.conf}"
+ARIA2_SESSION="${ARIA2_SESSION:-${ARIA2_CONF_DIR}/aria2.session}"
+ARIA2_DOWNLOAD_DIR="${ARIA2_DOWNLOAD_DIR:-/var/www/${DOMAIN}/downloads}"
+
+ARIA2_USER="${ARIA2_USER:-www-data}"
+ARIA2_GROUP="${ARIA2_GROUP:-www-data}"
+
+mkdir -p "$ARIA2_CONF_DIR"
+mkdir -p "$ARIA2_DOWNLOAD_DIR"
+touch "$ARIA2_SESSION"
+
 install_aria2_component() {
   log "Setting up aria2..."
 

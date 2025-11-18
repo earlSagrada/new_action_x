@@ -54,17 +54,41 @@ install_nginx_component() {
     log "Ensured UFW allows ports 80 and 443"
   fi
 
-  log "Requesting/renewing Let's Encrypt certificate for $DOMAIN ..."
-  certbot certonly --webroot -w "$WEBROOT" -d "$DOMAIN" \
-    --email "$EMAIL" --agree-tos --non-interactive \
-    --rsa-key-size 4096 --keep-until-expiring
+  CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
+  CERT_FULLCHAIN="${CERT_DIR}/fullchain.pem"
+  CERT_PRIVKEY="${CERT_DIR}/privkey.pem"
+
+  # Skip renewal if certificate is still valid (expires > 30 days from now)
+  if [[ -f "$CERT_FULLCHAIN" ]]; then
+    if openssl x509 -checkend $((30*24*3600)) -noout -in "$CERT_FULLCHAIN"; then
+      log "Existing certificate for $DOMAIN is still valid (>30 days) — skipping issuance."
+      SKIP_CERTBOT=true
+    else
+      log "Certificate for $DOMAIN is near expiry — renewing."
+      SKIP_CERTBOT=false
+    fi
+  else
+    SKIP_CERTBOT=false
+  fi
+
+  if [[ "$SKIP_CERTBOT" == true ]]; then
+    goto_cert_installed=true
+  fi
+
+  if [[ "$SKIP_CERTBOT" != true ]]; then
+    log "Requesting/renewing Let's Encrypt certificate for $DOMAIN ..."
+    certbot certonly --webroot -w "$WEBROOT" -d "$DOMAIN" \
+      --email "$EMAIL" --agree-tos --non-interactive \
+      --rsa-key-size 4096 --keep-until-expiring
+  fi
 
   local CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
   local CERT_FULLCHAIN="${CERT_DIR}/fullchain.pem"
   local CERT_PRIVKEY="${CERT_DIR}/privkey.pem"
 
+  # Ensure cert files exist even if certbot was skipped
   if [[ ! -f "$CERT_FULLCHAIN" || ! -f "$CERT_PRIVKEY" ]]; then
-    err "Certificate files not found in $CERT_DIR"
+    err "Certificate files not found. Something went wrong."
     exit 1
   fi
 
