@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/common.sh"
 
-ARIA2_CONF_DIR
-ARIA2_SESSION
-ARIA2_DOWNLOAD_DIR
-ARIA2_USER
-ARIA2_GROUP
-
 # Default paths for aria2
 ARIA2_CONF_DIR="${ARIA2_CONF_DIR:-/etc/aria2}"
 ARIA2_CONF="${ARIA2_CONF:-${ARIA2_CONF_DIR}/aria2.conf}"
