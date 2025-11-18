@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/common.sh"
 
 install_nginx_component() {
   if [[ -z "$DOMAIN" ]]; then

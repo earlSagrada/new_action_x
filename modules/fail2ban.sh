@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/common.sh"
 
 install_fail2ban_protection() {
   log "Configuring fail2ban aggressive protection..."

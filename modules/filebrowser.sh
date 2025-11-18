@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/common.sh"
 
 install_filebrowser_component() {
   log "Installing FileBrowser..."

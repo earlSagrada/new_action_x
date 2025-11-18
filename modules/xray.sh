@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/common.sh"
 
 install_xray_component() {
   log "Installing Xray core..."

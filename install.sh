@@ -137,6 +137,8 @@ full_install() {
   banner
   cecho green "[*] Starting FULL install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray)..."
 
+  chmod +x /opt/new_action_x/modules/common.sh
+
   run_module "nginx.sh"
   run_module "aria2.sh"
   run_module "ariang.sh"
@@ -150,6 +152,8 @@ full_install() {
 xray_only_install() {
   banner
   cecho green "[*] Starting XRAY-ONLY install (VLESS + Reality on UDP/443)..."
+
+  chmod +x /opt/new_action_x/modules/common.sh
 
   run_module "xray.sh"
 

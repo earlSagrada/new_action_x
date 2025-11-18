@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "$0")/common.sh"
 
 install_aria2_component() {
   log "Setting up aria2..."
