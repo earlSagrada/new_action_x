@@ -1,0 +1,13 @@
+[Unit]
+Description=FileBrowser
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/filebrowser -c {{FILEBROWSER_CONF}}
+Restart=on-failure
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

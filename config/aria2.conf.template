@@ -1,0 +1,34 @@
+## Basic
+dir={{DOWNLOAD_DIR}}
+file-allocation=trunc
+continue=true
+
+## Performance
+max-concurrent-downloads=5
+max-connection-per-server=8
+min-split-size=10M
+split=16
+
+## Upload limits
+max-overall-upload-limit=1024K
+max-upload-limit=100K
+
+## BT configuration
+enable-dht=true
+enable-peer-exchange=false
+listen-port=51413
+bt-seed-unverified=true
+bt-save-metadata=true
+seed-ratio=0
+
+## Session
+input-file={{ARIA2_CONF_DIR}}/aria2.session
+save-session={{ARIA2_CONF_DIR}}/aria2.session
+save-session-interval=60
+
+## RPC - nginx proxies TLS, so aria2 stays local HTTP
+enable-rpc=true
+rpc-allow-origin-all=false
+rpc-listen-all=false
+rpc-listen-port=6800
+rpc-secret={{RPC_SECRET}}

@@ -1,0 +1,58 @@
+# HTTP → HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{DOMAIN}} file.{{DOMAIN}};
+
+    location /.well-known/acme-challenge/ {
+        root {{WEBROOT}};
+    }
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS for AriaNg + JSON-RPC (HTTP/2)
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{DOMAIN}};
+
+    root {{WEBROOT}};
+    index index.html;
+
+    ssl_certificate     {{CERT_PATH}};
+    ssl_certificate_key {{KEY_PATH}};
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /jsonrpc {
+        proxy_pass http://127.0.0.1:6800/jsonrpc;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
+
+# HTTPS for FileBrowser (HTTP/2)
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name file.{{DOMAIN}};
+
+    ssl_certificate     {{CERT_PATH}};
+    ssl_certificate_key {{KEY_PATH}};
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
