@@ -63,8 +63,9 @@ bootstrap_repo() {
     cecho blue "[*] Cloning $REPO_URL ..."
     git clone "$REPO_URL" "$WORK_DIR"
   else
-    cecho blue "[*] Existing repo found at $WORK_DIR – pulling latest changes..."
-    git -C "$WORK_DIR" pull --ff-only
+    log "[*] Existing repo found at $WORK_DIR – resetting to remote latest..."
+    git -C "$WORK_DIR" fetch --all
+    git -C "$WORK_DIR" reset --hard origin/main
   fi
 
   cecho green "[*] Repo ready at $WORK_DIR"
