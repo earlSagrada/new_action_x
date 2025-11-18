@@ -1,0 +1,8 @@
+# logs
+*.log
+
+# system files
+.DS_Store
+
+# editor files
+.vscode/
