@@ -141,6 +141,7 @@ full_install() {
   cecho green "[*] Starting FULL install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray)..."
 
   chmod +x /opt/new_action_x/modules/common.sh
+  chmod +x /opt/new_action_x/modules/nginx.sh
 
   run_module "nginx.sh"
   run_module "aria2.sh"

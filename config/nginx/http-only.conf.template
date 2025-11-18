@@ -1,14 +1,17 @@
 server {
     listen 80;
-    listen [::]:80;
-    server_name {{DOMAIN}} file.{{DOMAIN}};
+    server_name {{DOMAIN}};
 
+    root {{WEBROOT}};
+    index index.html index.htm;
+
+    # ACME HTTP-01 challenge
     location /.well-known/acme-challenge/ {
         root {{WEBROOT}};
     }
 
-    # Temporary ACME server
+    # Redirect everything else to HTTPS once cert exists
     location / {
-        return 200 "ACME challenge server ready";
+        return 302 https://$host$request_uri;
     }
 }

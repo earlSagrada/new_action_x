@@ -1,24 +1,40 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
 source "$(dirname "$0")/common.sh"
 
 install_nginx_component() {
-  if [[ -z "$DOMAIN" ]]; then
-    err "DOMAIN is not set."
+  # DOMAIN and EMAIL must come from install.sh
+  if [[ -z "${DOMAIN:-}" ]]; then
+    err "DOMAIN is not set. It should be passed via install.sh (--domain) or interactive prompt."
     exit 1
   fi
 
-  if [[ -z "$EMAIL" ]]; then
-    err "EMAIL is not set."
+  if [[ -z "${EMAIL:-}" ]]; then
+    err "EMAIL is not set. It should be passed via install.sh (--email) or interactive prompt."
     exit 1
+  fi
+
+  # Defaults
+  WEBROOT="${WEBROOT:-/var/www/$DOMAIN/html}"
+  NGINX_SITE="/etc/nginx/sites-available/aria2_suite.conf"
+
+  log "Installing nginx and certbot (if not installed)..."
+  if ! command -v nginx >/dev/null 2>&1; then
+    apt-get update -y
+    apt-get install -y nginx python3-certbot-nginx
   fi
 
   mkdir -p "$WEBROOT"
 
   log "Configuring temporary HTTP-only nginx config for ACME challenges..."
-
   local http_tpl="${SCRIPT_DIR}/config/nginx/http-only.conf.template"
-  render_template "$http_tpl" "$NGINX_SITE" \
-    DOMAIN WEBROOT
+  if [[ ! -f "$http_tpl" ]]; then
+    err "HTTP-only template not found: $http_tpl"
+    exit 1
+  fi
+
+  render_template "$http_tpl" "$NGINX_SITE" DOMAIN WEBROOT
 
   ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/aria2_suite.conf
   if [[ -e /etc/nginx/sites-enabled/default ]]; then
@@ -26,63 +42,38 @@ install_nginx_component() {
   fi
 
   log "Testing nginx configuration (nginx -t)..."
-  if ! nginx -t; then
-    err "nginx config test FAILED for HTTP-only config!"
-    tail -n 50 /var/log/nginx/error.log 2>/dev/null || true
-    exit 1
-  fi
+  nginx -t
 
   systemctl enable nginx
   systemctl restart nginx
 
-  log "Requesting Let's Encrypt certificates via certbot (webroot)..."
+  log "Requesting/renewing Let's Encrypt certificate for $DOMAIN ..."
+  certbot certonly --webroot -w "$WEBROOT" -d "$DOMAIN" \
+    --email "$EMAIL" --agree-tos --non-interactive \
+    --rsa-key-size 4096 --keep-until-expiring
 
-  if certbot certonly --webroot -w "$WEBROOT" \
-        -d "$DOMAIN" -d "file.$DOMAIN" \
-        -m "$EMAIL" --agree-tos --non-interactive --no-eff-email; then
-    log "Certificates obtained successfully."
-    configure_nginx_https_from_templates
-  else
-    err "certbot failed! Dumping last 50 lines of certbot log:"
-    tail -n 50 /var/log/letsencrypt/letsencrypt.log 2>/dev/null || true
-    err "nginx will remain HTTP-only. Fix DNS / ports and rerun."
-    exit 1
-  fi
-}
+  local CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
+  local CERT_FULLCHAIN="${CERT_DIR}/fullchain.pem"
+  local CERT_PRIVKEY="${CERT_DIR}/privkey.pem"
 
-configure_nginx_https_from_templates() {
-  local cert_path="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
-  local key_path="/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
-
-  if [[ ! -f "$cert_path" || ! -f "$key_path" ]]; then
-    err "Certificates not found at ${cert_path} / ${key_path}; leaving HTTP-only config."
-    return
-  fi
-
-  CERT_PATH="$cert_path"
-  KEY_PATH="$key_path"
-
-  if nginx_supports_http3; then
-    log "nginx has http_v3_module; using HTTP/3 template."
-    local tpl="${SCRIPT_DIR}/config/nginx/https-http3.conf.template"
-    render_template "$tpl" "$NGINX_SITE" \
-      DOMAIN WEBROOT CERT_PATH KEY_PATH
-  else
-    log "nginx lacks http_v3_module; using HTTP/2-only template."
-    local tpl="${SCRIPT_DIR}/config/nginx/https-http2.conf.template"
-    render_template "$tpl" "$NGINX_SITE" \
-      DOMAIN WEBROOT CERT_PATH KEY_PATH
-  fi
-
-  log "Testing nginx configuration (nginx -t) for HTTPS..."
-  if ! nginx -t; then
-    err "nginx config test FAILED for HTTPS config!"
-    tail -n 50 /var/log/nginx/error.log 2>/dev/null || true
+  if [[ ! -f "$CERT_FULLCHAIN" || ! -f "$CERT_PRIVKEY" ]]; then
+    err "Certificate files not found in $CERT_DIR"
     exit 1
   fi
 
+  log "Configuring final HTTP/3 (QUIC) nginx config..."
+  local quic_tpl="${SCRIPT_DIR}/config/nginx/quic.conf.template"
+  if [[ ! -f "$quic_tpl" ]]; then
+    warn "QUIC template not found: $quic_tpl. Keeping HTTP-only config."
+  else
+    render_template "$quic_tpl" "$NGINX_SITE" DOMAIN WEBROOT CERT_FULLCHAIN CERT_PRIVKEY
+  fi
+
+  log "Testing final nginx configuration..."
+  nginx -t
   systemctl reload nginx
-  log "nginx HTTPS configuration applied."
+
+  log "Nginx installation and configuration completed."
 }
 
 install_nginx_component "$@"
