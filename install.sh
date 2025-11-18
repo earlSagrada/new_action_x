@@ -13,6 +13,8 @@ INTERNAL_FLAG="--internal-run"
 CURRENT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_NAME="$(basename "$0")"
 
+# Global options
+MODE="interactive"
 DOMAIN=""
 EMAIL=""
 
@@ -63,7 +65,7 @@ bootstrap_repo() {
     cecho blue "[*] Cloning $REPO_URL ..."
     git clone "$REPO_URL" "$WORK_DIR"
   else
-    log "[*] Existing repo found at $WORK_DIR – resetting to remote latest..."
+    cecho blue "[*] Repo exists – resetting to latest remote version..."
     git -C "$WORK_DIR" fetch --all
     git -C "$WORK_DIR" reset --hard origin/main
   fi
@@ -71,7 +73,7 @@ bootstrap_repo() {
   cecho green "[*] Repo ready at $WORK_DIR"
   cecho blue "[*] Handing control to repo-managed installer..."
 
-  # Re-exec installer from inside the repo
+  # Re-exec installer from inside the repo, preserving user args
   exec bash "$WORK_DIR/$SCRIPT_NAME" "$INTERNAL_FLAG" "$@"
 }
 
@@ -96,12 +98,12 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Re-detect current dir (should be WORK_DIR)
 CURRENT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
 MODULE_DIR="$CURRENT_DIR/modules"
 
+# ------------- Util for modules -----------------
 check_module_exists() {
   local mod="$1"
-  if [[ ! -x "$MODULE_DIR/$mod" && ! -f "$MODULE_DIR/$mod" ]]; then
+  if [[ ! -f "$MODULE_DIR/$mod" ]]; then
     cecho red "[!] Required module not found: $MODULE_DIR/$mod"
     exit 1
   fi
@@ -126,21 +128,81 @@ banner() {
 usage() {
   cat <<EOF
 Usage:
-  sudo ./install.sh           # interactive menu
-  sudo ./install.sh --full    # full install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray)
-  sudo ./install.sh --xray    # xray-only (VLESS + Reality)
-  sudo ./install.sh --update  # update all components
+  sudo ./install.sh                     # interactive menu
+  sudo ./install.sh --full   [--domain example.com --email admin@example.com]
+  sudo ./install.sh --xray   [--domain example.com --email admin@example.com]
+  sudo ./install.sh --update [--domain example.com --email admin@example.com]
 
-This script will always use the repo in:
-  $WORK_DIR
+Options:
+  --full      Full install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray)
+  --xray      Xray-only (VLESS + Reality)
+  --update    Update all components
+  --domain    Primary domain name (used for nginx, certbot, etc.)
+  --email     Email for Let's Encrypt registration
+  -h, --help  Show this help
+
+If --domain / --email are omitted, you will be prompted interactively.
 EOF
+}
+
+# ------------- Argument parsing -----------------
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --full)
+      MODE="full"
+      shift
+      ;;
+    --xray)
+      MODE="xray"
+      shift
+      ;;
+    --update)
+      MODE="update"
+      shift
+      ;;
+    --domain)
+      DOMAIN="${2:-}"
+      shift 2
+      ;;
+    --email)
+      EMAIL="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      cecho red "[!] Unknown argument: $1"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+# ------------- Ask for domain/email if needed ---
+ask_domain_email_if_missing() {
+  if [[ -z "$DOMAIN" ]]; then
+    read -rp "Enter your domain (e.g. example.com): " DOMAIN
+  fi
+
+  if [[ -z "$EMAIL" ]]; then
+    read -rp "Enter your email for Let's Encrypt: " EMAIL
+  fi
+
+  export DOMAIN
+  export EMAIL
+  # Let modules know they should NOT try to be interactive anymore
+  export NON_INTERACTIVE=true
 }
 
 # ------------- Actions --------------------------
 full_install() {
   banner
-  cecho green "[*] Starting FULL install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray)..."
+  ask_domain_email_if_missing
 
+  cecho green "[*] Starting FULL install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray)..."
+  
   chmod +x /opt/new_action_x/modules/common.sh
   chmod +x /opt/new_action_x/modules/nginx.sh
 
@@ -156,9 +218,9 @@ full_install() {
 
 xray_only_install() {
   banner
-  cecho green "[*] Starting XRAY-ONLY install (VLESS + Reality on UDP/443)..."
+  ask_domain_email_if_missing
 
-  chmod +x /opt/new_action_x/modules/common.sh
+  cecho green "[*] Starting XRAY-ONLY install (VLESS + Reality on UDP/443)..."
 
   run_module "xray.sh"
 
@@ -167,9 +229,13 @@ xray_only_install() {
 
 update_all() {
   banner
+  ask_domain_email_if_missing
+
   cecho green "[*] Updating NEW_ACTION_X components..."
 
-  # You can later adapt modules to support an --update flag if you like.
+  chmod +x /opt/new_action_x/modules/common.sh
+  chmod +x /opt/new_action_x/modules/nginx.sh
+  
   run_module "nginx.sh"
   run_module "aria2.sh"
   run_module "ariang.sh"
@@ -200,56 +266,7 @@ interactive_menu() {
   esac
 }
 
-# ------------- Argument parsing -----------------
-MODE="interactive"
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --full)
-      MODE="full"
-      shift
-      ;;
-    --xray)
-      MODE="xray"
-      shift
-      ;;
-    --update)
-      MODE="update"
-      shift
-      ;;
-    --domain)
-      DOMAIN="$2"
-      shift 2
-      ;;
-    --email)
-      EMAIL="$2"
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      cecho red "[!] Unknown argument: $1"
-      usage
-      exit 1
-      ;;
-  esac
-done
-
-# Ask for domain/email only if missing
-if [[ -z "$DOMAIN" ]]; then
-  read -rp "Enter your domain (e.g. example.com): " DOMAIN
-fi
-
-if [[ -z "$EMAIL" ]]; then
-  read -rp "Enter your email for Let's Encrypt: " EMAIL
-fi
-
-export DOMAIN
-export EMAIL
-export NON_INTERACTIVE=true
-
+# ------------- Dispatch -------------------------
 case "$MODE" in
   full)      full_install ;;
   xray)      xray_only_install ;;
