@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
 # Default paths for aria2
@@ -10,9 +11,15 @@ ARIA2_DOWNLOAD_DIR="${ARIA2_DOWNLOAD_DIR:-/var/www/${DOMAIN}/downloads}"
 ARIA2_USER="${ARIA2_USER:-www-data}"
 ARIA2_GROUP="${ARIA2_GROUP:-www-data}"
 
-mkdir -p "$ARIA2_CONF_DIR"
-mkdir -p "$ARIA2_DOWNLOAD_DIR"
+# systemd service path
+ARIA2_SERVICE_PATH="${ARIA2_SERVICE_PATH:-/etc/systemd/system/aria2.service}"
+
+# RPC secret
+RPC_SECRET="${RPC_SECRET:-$(openssl rand -hex 16)}"
+
+mkdir -p "$ARIA2_CONF_DIR" "$ARIA2_DOWNLOAD_DIR" /var/log/aria2 /var/lib/aria2
 touch "$ARIA2_SESSION"
+touch /var/log/aria2/aria2.log
 
 install_aria2_component() {
   log "Setting up aria2..."
@@ -28,7 +35,7 @@ install_aria2_component() {
   # Render systemd service from template
   local tpl_service="${SCRIPT_DIR}/config/systemd/aria2.service"
   render_template "$tpl_service" "$ARIA2_SERVICE_PATH" \
-    ARIA2_CONF
+    ARIA2_CONF ARIA2_USER ARIA2_GROUP ARIA2_SESSION
 
   systemctl daemon-reload
   systemctl enable aria2.service
