@@ -3,19 +3,13 @@ source "$(dirname "$0")/common.sh"
 
 install_nginx_component() {
   if [[ -z "$DOMAIN" ]]; then
-    if $NON_INTERACTIVE; then
-      err "--domain is required when installing nginx in non-interactive mode."
-      exit 1
-    fi
-    read -rp "Enter primary domain (e.g. example.com): " DOMAIN
+    err "DOMAIN is not set."
+    exit 1
   fi
 
   if [[ -z "$EMAIL" ]]; then
-    if $NON_INTERACTIVE; then
-      err "--email is required for certbot in non-interactive mode."
-      exit 1
-    fi
-    read -rp "Enter email for Let's Encrypt: " EMAIL
+    err "EMAIL is not set."
+    exit 1
   fi
 
   mkdir -p "$WEBROOT"

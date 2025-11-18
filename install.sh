@@ -13,6 +13,9 @@ INTERNAL_FLAG="--internal-run"
 CURRENT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_NAME="$(basename "$0")"
 
+DOMAIN=""
+EMAIL=""
+
 # ------------- Helper: colored echo -------------
 cecho() {
   local color="$1"; shift
@@ -212,6 +215,14 @@ while [[ $# -gt 0 ]]; do
       MODE="update"
       shift
       ;;
+    --domain)
+      DOMAIN="$2"
+      shift 2
+      ;;
+    --email)
+      EMAIL="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -223,6 +234,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Ask for domain/email only if missing
+if [[ -z "$DOMAIN" ]]; then
+  read -rp "Enter your domain (e.g. example.com): " DOMAIN
+fi
+
+if [[ -z "$EMAIL" ]]; then
+  read -rp "Enter your email for Let's Encrypt: " EMAIL
+fi
+
+export DOMAIN
+export EMAIL
+export NON_INTERACTIVE=true
 
 case "$MODE" in
   full)      full_install ;;

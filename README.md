@@ -43,15 +43,48 @@ Everything is designed to set up a fully working VPS with:
 ## 🚀 Quick Installation
 Run this on a **fresh Ubuntu server**:
 
+
 ```bash
 curl -O https://raw.githubusercontent.com/earlSagrada/new_action_x/main/install.sh
 chmod +x install.sh
 sudo ./install.sh
 ```
 
-During install you can choose:
-- **Xray only**
-- **Full suite (Nginx + Aria2 + Filebrowser + Fail2ban + Xray)**
+
+If you do **not** pass `--domain` or `--email`, the installer will ask you interactively.
+
+
+### Common command examples
+
+
+**Interactive menu:**
+```bash
+sudo ./install.sh
+```
+
+
+**Full install (QUIC Nginx + Aria2 + AriaNg + Filebrowser + Fail2ban + Xray):**
+```bash
+sudo ./install.sh --full --domain example.com --email admin@example.com
+```
+
+
+**Xray-only:**
+```bash
+sudo ./install.sh --xray --domain example.com --email admin@example.com
+```
+
+
+**Update existing installation:**
+```bash
+sudo ./install.sh --update --domain example.com --email admin@example.com
+```
+
+
+**Debug mode:**
+```bash
+sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
+```
 
 ---
 
