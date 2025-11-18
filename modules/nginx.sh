@@ -47,6 +47,13 @@ install_nginx_component() {
   systemctl enable nginx
   systemctl restart nginx
 
+  # Auto-fix UFW firewall so certbot can be reached
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow 80/tcp  || true
+    ufw allow 443/tcp || true
+    log "Ensured UFW allows ports 80 and 443"
+  fi
+
   log "Requesting/renewing Let's Encrypt certificate for $DOMAIN ..."
   certbot certonly --webroot -w "$WEBROOT" -d "$DOMAIN" \
     --email "$EMAIL" --agree-tos --non-interactive \
