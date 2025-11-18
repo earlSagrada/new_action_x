@@ -28,3 +28,5 @@ install_aria2_component() {
 
   log "aria2 installed and running as systemd service."
 }
+
+install_aria2_component "$@"

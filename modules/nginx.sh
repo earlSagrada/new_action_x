@@ -89,3 +89,5 @@ configure_nginx_https_from_templates() {
   systemctl reload nginx
   log "nginx HTTPS configuration applied."
 }
+
+install_nginx_component "$@"

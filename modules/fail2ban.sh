@@ -51,3 +51,5 @@ EOF
   systemctl restart fail2ban
   log "Fail2ban installed and configured with strict protection."
 }
+
+install_fail2ban_protection "$@"

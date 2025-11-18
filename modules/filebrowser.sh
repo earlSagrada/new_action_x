@@ -37,3 +37,5 @@ install_filebrowser_component() {
   log "FileBrowser installed and running on 127.0.0.1:8080."
   log "Default credentials: admin / admin (change ASAP)."
 }
+
+install_filebrowser_component "$@"

@@ -31,3 +31,5 @@ install_ariang_component() {
 
   log "AriaNg extracted to ${WEBROOT}."
 }
+
+install_ariang_component "$@"

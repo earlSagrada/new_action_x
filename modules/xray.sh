@@ -91,3 +91,5 @@ install_xray_reality_inbound() {
   qrencode -t ANSIUTF8 "${VLESS_LINK}"
   echo
 }
+
+install_xray_component "$@"
