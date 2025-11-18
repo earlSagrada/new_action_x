@@ -44,7 +44,7 @@ Everything is designed to set up a fully working VPS with:
 Run this on a **fresh Ubuntu server**:
 
 ```bash
-curl -O https://raw.githubusercontent.com/<yourname>/<repo>/main/install.sh
+curl -O https://raw.githubusercontent.com/earlSagrada/new_action_x/main/install.sh
 chmod +x install.sh
 sudo ./install.sh
 ```
