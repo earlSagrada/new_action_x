@@ -2,68 +2,81 @@
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
-# Default inbound type
+# Default inbound
 XRAY_INBOUND="${XRAY_INBOUND:-reality}"
 
 install_xray_component() {
   log "Installing Xray core..."
 
+  # Install Xray if missing
   if ! command -v xray >/dev/null 2>&1; then
     bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)
   else
-    log "Xray binary already present; skipping core installation."
+    log "Xray binary already installed; skipping core installation."
   fi
 
-  # Ensure qrencode is available for QR generation
+  # Install qrencode
   if ! command -v qrencode >/dev/null 2>&1; then
     log "Installing qrencode for QR code generation..."
     apt-get update -y
     apt-get install -y qrencode
   fi
 
-  # Ensure firewall allows Xray port(s)
+  # Open UDP+TCP 443 for Reality
   if command -v ufw >/dev/null 2>&1; then
     ufw allow 443/tcp  || true
     ufw allow 443/udp  || true
-    log "Ensured UFW allows TCP/UDP 443 for Xray."
+    log "Ensured UFW allows TCP/UDP 443 for Xray Reality."
   fi
 
+  # Dispatch to inbound handler
   case "$XRAY_INBOUND" in
     reality)
       install_xray_reality_inbound
       ;;
     *)
-      err "Xray inbound type '$XRAY_INBOUND' is not implemented yet."
-      err "Currently supported: reality (VLESS + Reality on UDP/443)"
+      err "Xray inbound type '$XRAY_INBOUND' not supported."
       exit 1
       ;;
   esac
 }
 
 install_xray_reality_inbound() {
-  log "Configuring Xray: VLESS + Reality on UDP/443 (xtls-rprx-vision)..."
+  log "Configuring Xray (VLESS + Reality on TCP/UDP 443, xtls-rprx-vision)..."
 
-  mkdir -p /etc/xray /var/log/xray
+  mkdir -p /usr/local/etc/xray /var/log/xray
+
   local tpl="${SCRIPT_DIR}/config/xray/reality.json.template"
-  local out="/etc/xray/config.json"
+  local out="/usr/local/etc/xray/config.json"
 
-  # Generate key pair
+  #############################
+  # Key generation
+  #############################
+  log "Generating Reality keypair..."
   local XRAY_KEYS
   XRAY_KEYS="$(xray x25519)"
+
   REALITY_PRIVATE_KEY="$(echo "$XRAY_KEYS" | grep Private | awk '{print $3}')"
   REALITY_PUBLIC_KEY="$(echo "$XRAY_KEYS" | grep Public | awk '{print $3}')"
+
   UUID="$(cat /proc/sys/kernel/random/uuid)"
   SHORT_ID="$(openssl rand -hex 4)"
 
-  log "Reality public key: ${REALITY_PUBLIC_KEY}"
-  log "User UUID:          ${UUID}"
-  log "ShortId:            ${SHORT_ID}"
+  log "Reality public key: $REALITY_PUBLIC_KEY"
+  log "UUID:               $UUID"
+  log "ShortId:            $SHORT_ID"
 
-  # Render config from template
+  #############################
+  # Render final config
+  #############################
   render_template "$tpl" "$out" \
     REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY UUID SHORT_ID
 
-  # Make sure service is enabled and restarted
+  chmod 600 "$out"
+
+  #############################
+  # Restart Xray
+  #############################
   systemctl enable xray || true
   systemctl restart xray
 
@@ -73,44 +86,41 @@ install_xray_reality_inbound() {
     exit 1
   fi
 
-  log "Xray (Reality) installed and running on TCP/UDP 443."
+  log "Xray Reality is now active on TCP/UDP 443."
 
-  echo
-  echo "--------- Xray Reality client info ---------"
-  echo "UUID:        ${UUID}"
-  echo "PublicKey:   ${REALITY_PUBLIC_KEY}"
-  echo "ShortId:     ${SHORT_ID}"
-  echo "ServerName:  www.cloudflare.com"
-  echo "Flow:        xtls-rprx-vision"
-  echo "Port:        443"
-  echo "Address:     (your VPS domain or IP)"
-  echo "--------------------------------------------"
-  echo "In v2rayNG, create a VLESS+Reality profile and fill these fields accordingly."
-  echo
+  #############################
+  # Generate client config link
+  #############################
 
-  # Auto-detect domain/IP for QR link
+  # Domain fallback
   if [[ -z "${DOMAIN:-}" ]]; then
     DOMAIN=$(hostname -I | awk '{print $1}')
   fi
 
-  # Generate VLESS Reality link (v2rayng / v2rayN format)
-  VLESS_LINK="vless://${UUID}@${DOMAIN}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.cloudflare.com&fp=chrome&pbk=${REALITY_PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp#Reality-${DOMAIN}"
+  local SNI="www.cloudflare.com"
 
-  echo
-  echo "VLESS link:"
-  echo "${VLESS_LINK}"
-  echo
+  VLESS_LINK="vless://${UUID}@${DOMAIN}:443?security=reality&encryption=none&flow=xtls-rprx-vision&type=tcp&fp=chrome&sni=${SNI}&pbk=${REALITY_PUBLIC_KEY}&sid=${SHORT_ID}#Reality-${DOMAIN}"
 
-  # Generate QR code image and terminal QR
-  QR_PATH="/root/xray-qr.png"
-  qrencode -o "${QR_PATH}" -s 8 "${VLESS_LINK}"
-
-  log "QR code generated at: ${QR_PATH}"
-  log "You can download it by: scp root@your-server:${QR_PATH} ."
+  log "Generated VLESS Reality link:"
+  echo "$VLESS_LINK"
   echo
 
-  qrencode -t ANSIUTF8 "${VLESS_LINK}"
+  #############################
+  # Generate QR code
+  #############################
+  local QR_IMG="/root/xray-reality-${DOMAIN}.png"
+  qrencode -o "$QR_IMG" -s 8 "$VLESS_LINK"
+
+  log "QR code saved to: $QR_IMG"
+  log "Example download command:"
+  echo "scp root@${DOMAIN}:${QR_IMG} ."
   echo
+
+  # Terminal QR
+  qrencode -t ANSIUTF8 "$VLESS_LINK"
+  echo
+
+  log "Xray Reality configuration completed."
 }
 
 install_xray_component "$@"
