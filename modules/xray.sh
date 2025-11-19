@@ -54,7 +54,7 @@ install_xray_reality_inbound() {
   #############################
   log "Generating Reality keypair..."
   local XRAY_KEYS
-  XRAY_KEYS="$(xray x25519)"
+  XRAY_KEYS="$(xray x25519 2>/dev/null || true)"
 
   REALITY_PRIVATE_KEY="$(echo "$XRAY_KEYS" | grep Private | awk '{print $3}')"
   REALITY_PUBLIC_KEY="$(echo "$XRAY_KEYS" | grep Public | awk '{print $3}')"
