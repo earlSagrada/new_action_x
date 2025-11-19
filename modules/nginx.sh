@@ -1,78 +1,66 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "$(dirname "$0")/common.sh"
+MODULE_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$MODULE_DIR/.." && pwd)"
+source "$SCRIPT_DIR/modules/common.sh"
 
 install_nginx_component() {
-  # DOMAIN and EMAIL must come from install.sh
   if [[ -z "${DOMAIN:-}" ]]; then
-    err "DOMAIN is not set. It should be passed via install.sh (--domain) or interactive prompt."
+    err "DOMAIN is not set. Pass --domain to install.sh."
     exit 1
   fi
-
   if [[ -z "${EMAIL:-}" ]]; then
-    err "EMAIL is not set. It should be passed via install.sh (--email) or interactive prompt."
+    err "EMAIL is not set. Pass --email to install.sh."
     exit 1
   fi
 
-  # Defaults
-  WEBROOT="${WEBROOT:-/var/www/$DOMAIN/html}"
-  NGINX_SITE="/etc/nginx/sites-available/aria2_suite.conf"
+  # Shared webroot for this domain
+  WEBROOT="${WEBROOT:-/var/www/${DOMAIN}/html}"
 
-  log "Installing nginx and certbot (if not installed)..."
+  log "Installing nginx and certbot..."
   if ! command -v nginx >/dev/null 2>&1; then
     apt-get update -y
     apt-get install -y nginx python3-certbot-nginx
   fi
 
-  mkdir -p "$WEBROOT"
-
-  log "Configuring temporary HTTP-only nginx config for ACME challenges..."
-  local http_tpl="${SCRIPT_DIR}/config/nginx/http-only.conf.template"
-  if [[ ! -f "$http_tpl" ]]; then
-    err "HTTP-only template not found: $http_tpl"
-    exit 1
+  # UFW for HTTP/HTTPS
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow 80/tcp  || true
+    ufw allow 443/tcp || true
+    log "Ensured UFW allows HTTP/HTTPS on 80/443."
   fi
 
-  render_template "$http_tpl" "$NGINX_SITE" DOMAIN WEBROOT
+  mkdir -p "$WEBROOT"
+
+  local NGINX_SITE="/etc/nginx/sites-available/aria2_suite.conf"
+  local HTTP_TPL="${SCRIPT_DIR}/config/nginx/http-only.conf.template"
+
+  log "Configuring temporary HTTP-only nginx site for ACME..."
+  render_template "$HTTP_TPL" "$NGINX_SITE" DOMAIN WEBROOT
 
   ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/aria2_suite.conf
   if [[ -e /etc/nginx/sites-enabled/default ]]; then
     rm -f /etc/nginx/sites-enabled/default
   fi
 
-  log "Testing nginx configuration (nginx -t)..."
+  log "Testing nginx configuration (HTTP-only)..."
   nginx -t
-
   systemctl enable nginx
   systemctl restart nginx
 
-  # Auto-fix UFW firewall so certbot can be reached
-  if command -v ufw >/dev/null 2>&1; then
-    ufw allow 80/tcp  || true
-    ufw allow 443/tcp || true
-    log "Ensured UFW allows ports 80 and 443"
-  fi
+  # Cert files
+  local CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
+  local CERT_FULLCHAIN="${CERT_DIR}/fullchain.pem"
+  local CERT_PRIVKEY="${CERT_DIR}/privkey.pem"
 
-  CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
-  CERT_FULLCHAIN="${CERT_DIR}/fullchain.pem"
-  CERT_PRIVKEY="${CERT_DIR}/privkey.pem"
-
-  # Skip renewal if certificate is still valid (expires > 30 days from now)
+  # Skip certbot if cert valid > 30 days
+  local SKIP_CERTBOT=false
   if [[ -f "$CERT_FULLCHAIN" ]]; then
     if openssl x509 -checkend $((30*24*3600)) -noout -in "$CERT_FULLCHAIN"; then
-      log "Existing certificate for $DOMAIN is still valid (>30 days) — skipping issuance."
+      log "Existing certificate still valid (>30 days). Skipping certbot."
       SKIP_CERTBOT=true
-    else
-      log "Certificate for $DOMAIN is near expiry — renewing."
-      SKIP_CERTBOT=false
     fi
-  else
-    SKIP_CERTBOT=false
-  fi
-
-  if [[ "$SKIP_CERTBOT" == true ]]; then
-    goto_cert_installed=true
   fi
 
   if [[ "$SKIP_CERTBOT" != true ]]; then
@@ -82,29 +70,23 @@ install_nginx_component() {
       --rsa-key-size 4096 --keep-until-expiring
   fi
 
-  local CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
-  local CERT_FULLCHAIN="${CERT_DIR}/fullchain.pem"
-  local CERT_PRIVKEY="${CERT_DIR}/privkey.pem"
-
-  # Ensure cert files exist even if certbot was skipped
   if [[ ! -f "$CERT_FULLCHAIN" || ! -f "$CERT_PRIVKEY" ]]; then
-    err "Certificate files not found. Something went wrong."
+    err "Certificate files not found in $CERT_DIR"
     exit 1
   fi
 
-  log "Configuring final HTTP/3 (QUIC) nginx config..."
-  local quic_tpl="${SCRIPT_DIR}/config/nginx/quic.conf.template"
-  if [[ ! -f "$quic_tpl" ]]; then
-    warn "QUIC template not found: $quic_tpl. Keeping HTTP-only config."
-  else
-    render_template "$quic_tpl" "$NGINX_SITE" DOMAIN WEBROOT CERT_FULLCHAIN CERT_PRIVKEY
-  fi
+  # Final QUIC/HTTP3 config
+  local QUIC_TPL="${SCRIPT_DIR}/config/nginx/quic.conf.template"
+
+  log "Configuring final QUIC/HTTP3 nginx site..."
+  render_template "$QUIC_TPL" "$NGINX_SITE" \
+    DOMAIN WEBROOT CERT_FULLCHAIN CERT_PRIVKEY
 
   log "Testing final nginx configuration..."
   nginx -t
   systemctl reload nginx
 
-  log "Nginx installation and configuration completed."
+  log "Nginx with HTTP/3/QUIC configured for $DOMAIN."
 }
 
 install_nginx_component "$@"

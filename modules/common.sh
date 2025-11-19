@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# SCRIPT_DIR = repo root (new_action_x)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# If SCRIPT_DIR not preset, assume this file lives in modules/ under repo root
+if [[ -z "${SCRIPT_DIR:-}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
 
 log() {
   echo -e "\033[32m[*]\033[0m $*"
@@ -16,9 +18,9 @@ err() {
   echo -e "\033[31m[!]\033[0m $*" >&2
 }
 
-# Simple template engine:
-# usage: render_template template_path dest_path VAR1 VAR2 ...
-# Template placeholders are {{VAR1}}, {{VAR2}}, ...
+# Simple template renderer:
+#   render_template template_path dest_path VAR1 VAR2 ...
+#   Replaces {{VAR1}}, {{VAR2}} with values from environment.
 render_template() {
   local template="$1"
   local dest="$2"

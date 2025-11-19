@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(dirname "$0")/common.sh"
 
-# --- Defaults ---
-# Webroot for your site (same as nginx)
-WEBROOT="${WEBROOT:-/var/www/${DOMAIN}/html}"
+MODULE_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$MODULE_DIR/.." && pwd)"
+source "$SCRIPT_DIR/modules/common.sh"
 
-# AriaNg installation directory
+WEBROOT="${WEBROOT:-/var/www/${DOMAIN:-example.com}/html}"
 ARIANG_DIR="${ARIANG_DIR:-/usr/share/ariang}"
 
 install_ariang_component() {
   log "Installing latest AriaNg..."
 
-  # Ensure dependencies
+  # jq for GitHub API
   if ! command -v jq >/dev/null 2>&1; then
     log "Installing jq..."
     apt-get update -y
@@ -21,7 +20,6 @@ install_ariang_component() {
 
   mkdir -p "$ARIANG_DIR"
 
-  # Fetch latest release
   local api_url="https://api.github.com/repos/mayswind/AriaNg/releases/latest"
   local latest_tag
   latest_tag="$(curl -fsSL "$api_url" | jq -r '.tag_name')"
@@ -33,7 +31,6 @@ install_ariang_component() {
 
   log "Latest AriaNg release: ${latest_tag}"
 
-  # Download ZIP
   local zip_url="https://github.com/mayswind/AriaNg/releases/download/${latest_tag}/AriaNg-${latest_tag#v}.zip"
   if ! curl -I -fsSL "$zip_url" >/dev/null 2>&1; then
     zip_url="https://github.com/mayswind/AriaNg/releases/download/${latest_tag}/AriaNg.zip"
@@ -43,14 +40,13 @@ install_ariang_component() {
   rm -f "$tmp_zip"
   curl -fLo "$tmp_zip" "$zip_url"
 
-  # Extract into ARIANG_DIR
   rm -rf "${ARIANG_DIR:?}"/*
   unzip -q "$tmp_zip" -d "$ARIANG_DIR"
   rm -f "$tmp_zip"
 
   log "AriaNg extracted to ${ARIANG_DIR}."
 
-  # Optional: create an nginx alias (recommended)
+  # nginx alias for /ariang
   local nginx_alias="/etc/nginx/snippets/ariang.conf"
   cat > "$nginx_alias" <<EOF
 location /ariang {

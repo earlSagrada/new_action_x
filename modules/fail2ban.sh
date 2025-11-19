@@ -1,26 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$(dirname "$0")/common.sh"
+
+MODULE_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$MODULE_DIR/.." && pwd)"
+source "$SCRIPT_DIR/modules/common.sh"
 
 install_fail2ban_protection() {
   log "Configuring fail2ban aggressive protection..."
 
-  # Install fail2ban if missing
   if ! command -v fail2ban-server >/dev/null 2>&1; then
-    log "fail2ban not found, installing..."
+    log "Installing fail2ban..."
     apt-get update -y
     apt-get install -y fail2ban
-  else
-    log "fail2ban already installed; configuring."
   fi
 
-  # Ensure directories
-  mkdir -p /etc/fail2ban/jail.d
-  mkdir -p /etc/fail2ban/filter.d
+  mkdir -p /etc/fail2ban/jail.d /etc/fail2ban/filter.d
 
-  #############################
-  # Fail2ban: Xray Reality
-  #############################
+  # Xray Reality jail
   cat >/etc/fail2ban/filter.d/xray-reality.conf <<'EOF'
 [Definition]
 failregex = ^.*reality.*(fail|error).*
@@ -38,9 +34,7 @@ findtime  = 48h
 bantime   = 10d
 EOF
 
-  #############################
-  # Fail2ban: nginx brute force
-  #############################
+  # nginx strict jail
   cat >/etc/fail2ban/filter.d/nginx-hard.conf <<'EOF'
 [Definition]
 failregex = ^<HOST> -.*"(GET|POST).*HTTP.*" (400|401|403|404)
@@ -67,7 +61,7 @@ EOF
     exit 1
   fi
 
-  log "Fail2ban installed and configured with strict protection (Xray + nginx)."
+  log "Fail2ban installed and configured (nginx + Xray jails, 3 tries/48h → 10d ban)."
 }
 
 install_fail2ban_protection "$@"
