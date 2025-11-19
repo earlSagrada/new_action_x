@@ -95,8 +95,18 @@ install_xray_reality_inbound() {
     REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY UUID SHORT_ID
 
   chmod 600 "$out"
+  chmod 644 /usr/local/etc/xray/config.json
 
   # ---------------- Restart Xray ----------------
+  # Ensure Xray runs as root (required for Reality + port 443 + reading config)
+  XRAY_SERVICE="/etc/systemd/system/xray.service"
+  if grep -q 'User=nobody' "$XRAY_SERVICE"; then
+      sed -i 's/User=nobody/User=root/' "$XRAY_SERVICE"
+      log "Patched xray.service to run as root"
+  fi
+
+  systemctl daemon-reload
+
   systemctl enable xray || true
   systemctl restart xray
 

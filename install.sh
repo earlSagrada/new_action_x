@@ -145,6 +145,14 @@ If --domain / --email are omitted, you will be prompted interactively.
 EOF
 }
 
+# Install health-check tools
+install_health_checks() {
+    mkdir -p /usr/local/bin
+    cp "$SCRIPT_DIR/bin/xray-check.sh" /usr/local/bin/xray-check
+    chmod +x /usr/local/bin/xray-check
+    log "Installed xray-check tool: use 'xray-check' anytime to debug Xray."
+}
+
 # ------------- Argument parsing -----------------
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -214,6 +222,7 @@ full_install() {
   run_module "xray.sh"
 
   cecho green "[✓] Full install completed."
+  install_health_checks
 }
 
 xray_only_install() {
@@ -225,6 +234,7 @@ xray_only_install() {
   run_module "xray.sh"
 
   cecho green "[✓] Xray-only install completed."
+  install_health_checks
 }
 
 update_all() {
@@ -244,6 +254,7 @@ update_all() {
   run_module "xray.sh"
 
   cecho green "[✓] Update completed."
+  install_health_checks
 }
 
 interactive_menu() {
