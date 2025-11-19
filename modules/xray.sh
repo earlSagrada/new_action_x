@@ -53,11 +53,20 @@ install_xray_reality_inbound() {
   # Key generation
   #############################
   log "Generating Reality keypair..."
-  local XRAY_KEYS
-  XRAY_KEYS="$(xray x25519 2>/dev/null || true)"
 
-  REALITY_PRIVATE_KEY="$(echo "$XRAY_KEYS" | grep Private | awk '{print $3}')"
-  REALITY_PUBLIC_KEY="$(echo "$XRAY_KEYS" | grep Public | awk '{print $3}')"
+  TMP_KEYS="/tmp/xray_keys_$$.txt"
+  xray x25519 > "$TMP_KEYS" 2>/dev/null || true
+
+  REALITY_PRIVATE_KEY="$(grep -i 'Private' "$TMP_KEYS" | awk '{print $3}')"
+  REALITY_PUBLIC_KEY="$(grep -i 'Public'  "$TMP_KEYS" | awk '{print $3}')"
+
+  rm -f "$TMP_KEYS"
+
+  if [[ -z "$REALITY_PRIVATE_KEY" || -z "$REALITY_PUBLIC_KEY" ]]; then
+    err "Failed to parse Reality keypair. Raw output:"
+    cat "$TMP_KEYS"
+    exit 1
+  fi
 
   UUID="$(cat /proc/sys/kernel/random/uuid)"
   SHORT_ID="$(openssl rand -hex 4)"
