@@ -148,7 +148,7 @@ EOF
 # Install health-check tools
 install_health_checks() {
     mkdir -p /usr/local/bin
-    cp "$SCRIPT_DIR/bin/xray-check.sh" /usr/local/bin/xray-check
+    cp "$WORK_DIR/bin/xray-check.sh" /usr/local/bin/xray-check
     chmod +x /usr/local/bin/xray-check
     log "Installed xray-check tool: use 'xray-check' anytime to debug Xray."
 }
