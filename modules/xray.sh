@@ -42,6 +42,11 @@ install_xray_reality_inbound() {
 
   mkdir -p /usr/local/etc/xray /var/log/xray
 
+  # Ensure Xray can write logs
+  touch /var/log/xray/access.log /var/log/xray/error.log
+  chmod 644 /var/log/xray/*log
+  chown root:root /var/log/xray/*log
+
   local tpl="${SCRIPT_DIR}/config/xray/reality.json.template"
   local out="/usr/local/etc/xray/config.json"
 
@@ -105,6 +110,7 @@ install_xray_reality_inbound() {
       log "Patched xray.service to run as root"
   fi
 
+  sed -i 's/User=nobody/User=root/' /etc/systemd/system/xray.service
   systemctl daemon-reload
 
   systemctl enable xray || true
