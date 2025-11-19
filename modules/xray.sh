@@ -107,6 +107,9 @@ install_xray_reality_inbound() {
   XRAY_SERVICE="/etc/systemd/system/xray.service"
   if grep -q 'User=nobody' "$XRAY_SERVICE"; then
       sed -i 's/User=nobody/User=root/' "$XRAY_SERVICE"
+      sed -i '/^\[Service\]/a ProtectSystem=off\nProtectHome=off\nPrivateTmp=false\nNoNewPrivileges=false' \
+      /etc/systemd/system/xray.service
+      systemctl daemon-reload
       log "Patched xray.service to run as root"
   fi
 
