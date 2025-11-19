@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
+set -euo pipefail
 source "$(dirname "$0")/common.sh"
+
+# Default inbound type
+XRAY_INBOUND="${XRAY_INBOUND:-reality}"
 
 install_xray_component() {
   log "Installing Xray core..."
@@ -8,6 +12,20 @@ install_xray_component() {
     bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)
   else
     log "Xray binary already present; skipping core installation."
+  fi
+
+  # Ensure qrencode is available for QR generation
+  if ! command -v qrencode >/dev/null 2>&1; then
+    log "Installing qrencode for QR code generation..."
+    apt-get update -y
+    apt-get install -y qrencode
+  fi
+
+  # Ensure firewall allows Xray port(s)
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow 443/tcp  || true
+    ufw allow 443/udp  || true
+    log "Ensured UFW allows TCP/UDP 443 for Xray."
   fi
 
   case "$XRAY_INBOUND" in
@@ -45,6 +63,8 @@ install_xray_reality_inbound() {
   render_template "$tpl" "$out" \
     REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY UUID SHORT_ID
 
+  # Make sure service is enabled and restarted
+  systemctl enable xray || true
   systemctl restart xray
 
   if ! systemctl is-active --quiet xray; then
@@ -69,7 +89,7 @@ install_xray_reality_inbound() {
   echo
 
   # Auto-detect domain/IP for QR link
-  if [[ -z "${DOMAIN}" ]]; then
+  if [[ -z "${DOMAIN:-}" ]]; then
     DOMAIN=$(hostname -I | awk '{print $1}')
   fi
 
@@ -81,7 +101,7 @@ install_xray_reality_inbound() {
   echo "${VLESS_LINK}"
   echo
 
-  # Generate QR code
+  # Generate QR code image and terminal QR
   QR_PATH="/root/xray-qr.png"
   qrencode -o "${QR_PATH}" -s 8 "${VLESS_LINK}"
 
