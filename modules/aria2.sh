@@ -24,8 +24,15 @@ touch /var/log/aria2/aria2.log
 install_aria2_component() {
   log "Setting up aria2..."
 
+  log "Installing aria2 package..."
+  apt-get update -y
+  apt-get install -y aria2
+
   mkdir -p "$ARIA2_CONF_DIR" "$ARIA2_DOWNLOAD_DIR" /var/log/aria2 /var/lib/aria2
   touch "${ARIA2_CONF_DIR}/aria2.session"
+  touch /var/log/aria2/aria2.log
+
+  chown -R "$ARIA2_USER":"$ARIA2_GROUP" "$ARIA2_CONF_DIR" "$ARIA2_DOWNLOAD_DIR" /var/log/aria2 /var/lib/aria2
 
   # Render aria2.conf from template
   local tpl="${SCRIPT_DIR}/config/aria2.conf.template"
@@ -36,6 +43,8 @@ install_aria2_component() {
   local tpl_service="${SCRIPT_DIR}/config/systemd/aria2.service"
   render_template "$tpl_service" "$ARIA2_SERVICE_PATH" \
     ARIA2_CONF ARIA2_USER ARIA2_GROUP ARIA2_SESSION
+
+  chmod 644 "$ARIA2_SERVICE_PATH"
 
   systemctl daemon-reload
   systemctl enable aria2.service
