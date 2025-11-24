@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
 echo "=== Xray Health Check ==="
 echo
@@ -64,7 +64,24 @@ echo "[6] Testing if your own VPS hostname resolves:"
 HOSTNAME_IP="$(hostname -I | awk '{print $1}')"
 echo "Server IPv4: $HOSTNAME_IP"
 
+
 echo "[7] Testing Xray inbound loopback (basic):"
+
+JSON_FILE="/usr/local/etc/xray/config.json"
+
+UUID="$(grep -oP '(?<="id": ")[^"]+' "$JSON_FILE" | head -n1 || true)"
+PBK="$(grep -oP '(?<="publicKey": ")[^"]+' "$JSON_FILE" | head -n1 || true)"
+SID="$(grep -oP '(?<="shortIds": \["?)([^"]+)' "$JSON_FILE" | head -n1 || true)"
+
+UUID="${UUID:-}"
+PBK="${PBK:-}"
+SID="${SID:-}"
+
+if [[ -z "$UUID" ]]; then
+    echo "Skipping loopback test: UUID not found in config."
+    exit 0
+fi
+
 if curl --proxy "vless://${UUID}@127.0.0.1:443" -Is https://www.cloudflare.com >/dev/null 2>&1; then
     echo "✔ Xray inbound reachable from VPS"
 else

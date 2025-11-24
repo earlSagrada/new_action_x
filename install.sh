@@ -18,6 +18,9 @@ MODE="interactive"
 DOMAIN=""
 EMAIL=""
 
+# Load shared functions (log, err)
+source "$WORK_DIR/modules/common.sh"
+
 # ------------- Helper: colored echo -------------
 cecho() {
   local color="$1"; shift
