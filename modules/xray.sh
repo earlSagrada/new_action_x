@@ -104,6 +104,17 @@ install_xray_reality_inbound() {
 
   # ---------------- Restart Xray ----------------
   # Ensure Xray runs as root (required for Reality + port 443 + reading config)
+  log "Applying systemd override for Xray..."
+
+  # Ensure override directory exists
+  mkdir -p /etc/systemd/system/xray.service.d
+
+  # Copy override file from repo
+  cp "$WORK_DIR/config/systemd/xray.service.override" \
+    /etc/systemd/system/xray.service.d/override.conf
+
+  systemctl daemon-reload
+
   XRAY_SERVICE="/etc/systemd/system/xray.service"
   if grep -q 'User=nobody' "$XRAY_SERVICE"; then
       sed -i 's/User=nobody/User=root/' "$XRAY_SERVICE"

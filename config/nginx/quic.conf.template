@@ -7,8 +7,8 @@ server {
 
 # HTTPS + HTTP/3 (QUIC)
 server {
-    listen 443 ssl http2;
-    listen 443 quic reuseport;
+    listen 127.0.0.1:8443 ssl http2;
+    listen 127.0.0.1:8443 quic;
     server_name {{DOMAIN}};
 
     ssl_certificate {{CERT_FULLCHAIN}};
