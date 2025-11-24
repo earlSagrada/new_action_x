@@ -23,9 +23,37 @@ install_xray() {
 
 generate_reality_keys() {
   log "[*] Generating reality keypair..."
-  RAW_OUTPUT=$("${XRAY_BIN}" x25519)
-  PRIVATE_KEY=$(echo "$RAW_OUTPUT" | grep "Private" | awk '{print $2}')
-  PUBLIC_KEY=$(echo "$RAW_OUTPUT" | grep "Public" | awk '{print $2}')
+  log "[*] Generating Reality keypair..."
+
+  # Run keygen safely
+  KEY_JSON=$("${XRAY_BIN}" x25519 2>/dev/null || true)
+
+  # Newer versions output pure JSON, older versions output plaintext.
+  if echo "$KEY_JSON" | grep -q "Private"; then
+      # Old style plaintext output
+      PRIVATE_KEY=$(echo "$KEY_JSON" | awk '/Private/ {print $2}')
+      PUBLIC_KEY=$(echo "$KEY_JSON" | awk '/Public/ {print $2}')
+  else
+      # JSON format
+      PRIVATE_KEY=$(echo "$KEY_JSON" | grep private | sed 's/.*: "\(.*\)".*/\1/')
+      PUBLIC_KEY=$(echo "$KEY_JSON" | grep public | sed 's/.*: "\(.*\)".*/\1/')
+  fi
+
+  if [[ -z "${PRIVATE_KEY:-}" || -z "${PUBLIC_KEY:-}" ]]; then
+      err "Failed to generate Reality keys! Output was: $KEY_JSON"
+      exit 1
+  fi
+
+  UUID=$(cat /proc/sys/kernel/random/uuid)
+  SHORT_ID=$(openssl rand -hex 4)
+
+  export PRIVATE_KEY PUBLIC_KEY UUID SHORT_ID
+
+  log "[*] Reality keys generated:"
+  echo "  Private: $PRIVATE_KEY"
+  echo "  Public:  $PUBLIC_KEY"
+  echo "  UUID:    $UUID"
+  echo "  ShortId: $SHORT_ID"
 
   log "[*] Reality keypair generated:"
   echo "  PrivateKey: $PRIVATE_KEY"
