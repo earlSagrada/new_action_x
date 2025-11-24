@@ -110,7 +110,7 @@ install_xray_reality_inbound() {
   mkdir -p /etc/systemd/system/xray.service.d
 
   # Copy override file from repo
-  cp "$WORK_DIR/config/systemd/xray.service.override" \
+  cp "$SCRIPT_DIR/config/systemd/xray.service.override" \
     /etc/systemd/system/xray.service.d/override.conf
 
   systemctl daemon-reload
