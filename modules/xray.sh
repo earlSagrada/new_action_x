@@ -158,6 +158,16 @@ generate_qr_code() {
 
 log "Xray core already installed."
 
+log "Ensuring firewall allows Reality port 24443 (TCP/UDP)..."
+ufw allow 24443/tcp || true
+ufw allow 24443/udp || true
+
+# Fallback for non-UFW systems
+if command -v iptables >/dev/null 2>&1; then
+    iptables -I INPUT -p tcp --dport 24443 -j ACCEPT || true
+    iptables -I INPUT -p udp --dport 24443 -j ACCEPT || true
+fi
+
 generate_reality_keys
 
 render_tls_inbound
