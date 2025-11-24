@@ -11,26 +11,9 @@ XRAY_CONFIG="/usr/local/etc/xray/config.json"
 log() { echo -e "\e[32m[*]\e[0m $*"; }
 err() { echo -e "\e[31m[!]\e[0m $*" >&2; }
 
-# ---------------- Check DOMAIN ----------------
-ensure_domain() {
-  if [[ -z "${DOMAIN:-}" ]]; then
-    if [[ -f "$SCRIPT_ROOT/config/domain" ]]; then
-      DOMAIN="$(cat "$SCRIPT_ROOT/config/domain" | tr -d '[:space:]')"
-      export DOMAIN
-    fi
-  fi
-
-  if [[ -z "${DOMAIN:-}" ]]; then
-    err "DOMAIN is not set. Please export DOMAIN or put it in config/domain."
-    exit 1
-  fi
-
-  log "Using DOMAIN: $DOMAIN"
-}
-
-# ---------------- Install Xray if missing ----------------
+# ---------------- Xray install check ----------------
 install_xray() {
-  if ! command -v xray >/dev/null 2>&1; then
+  if ! command -v "$XRAY_BIN" >/dev/null 2>&1; then
     log "Installing Xray core..."
     bash <(curl -L https://raw.githubusercontent.com/XTLS/Xray-install/main/install-release.sh)
   else
@@ -38,9 +21,9 @@ install_xray() {
   fi
 }
 
-# ---------------- Firewall for 443/8443 ----------------
+# ---------------- Firewall ----------------
 open_ports() {
-  log "Ensuring firewall allows ports 443 and 8443..."
+  log "Ensuring firewall allows 443 and 8443 (TCP/UDP)..."
 
   if command -v ufw >/dev/null 2>&1; then
     ufw allow 443/tcp || true
@@ -50,14 +33,14 @@ open_ports() {
   fi
 
   if command -v iptables >/dev/null 2>&1; then
-    iptables -I INPUT -p tcp --dport 443 -j ACCEPT || true
-    iptables -I INPUT -p udp --dport 443 -j ACCEPT || true
+    iptables -I INPUT -p tcp --dport 443  -j ACCEPT || true
+    iptables -I INPUT -p udp --dport 443  -j ACCEPT || true
     iptables -I INPUT -p tcp --dport 8443 -j ACCEPT || true
     iptables -I INPUT -p udp --dport 8443 -j ACCEPT || true
   fi
 }
 
-# ---------------- Keypair generation ----------------
+# ---------------- Reality keypair ----------------
 generate_reality_keys() {
   log "Generating Reality keypair..."
 
@@ -95,65 +78,44 @@ generate_reality_keys() {
 
   export PRIVATE_KEY PUBLIC_KEY UUID SHORT_ID
 
-  log "Reality keys generated:"
-  log "  UUID:       $UUID"
-  log "  PublicKey:  $PUBLIC_KEY"
-  log "  ShortId:    $SHORT_ID"
+  log "Reality keys:"
+  log "  UUID:      $UUID"
+  log "  PublicKey: $PUBLIC_KEY"
+  log "  ShortId:   $SHORT_ID"
 }
 
-# ---------------- Template rendering ----------------
-render_reality_inbound() {
+# ---------------- Render template ----------------
+render_config() {
   local template_file="$TEMPLATE_DIR/reality.json.template"
-  local output_file="/tmp/reality_inbound.json"
 
   if [[ ! -f "$template_file" ]]; then
     err "Template not found: $template_file"
     exit 1
   fi
 
-  sed \
-    -e "s|{{UUID}}|$UUID|g" \
-    -e "s|{{PRIVATE_KEY}}|$PRIVATE_KEY|g" \
-    -e "s|{{PUBLIC_KEY}}|$PUBLIC_KEY|g" \
-    -e "s|{{SHORT_ID}}|$SHORT_ID|g" \
-    -e "s|{{DOMAIN}}|$DOMAIN|g" \
-    "$template_file" > "$output_file"
-}
-
-# ---------------- Write final config ----------------
-write_final_config() {
-  log "Writing Xray final config (overwrite mode)..."
+  log "Rendering Xray config from template..."
 
   rm -f "$XRAY_CONFIG"
 
-  cat > "$XRAY_CONFIG" <<EOF
-{
-  "log": {
-    "loglevel": "warning",
-    "error": "/var/log/xray/error.log",
-    "access": "/var/log/xray/access.log"
-  },
-
-  "inbounds": [
-$(cat /tmp/reality_inbound.json)
-  ],
-
-  "outbounds": [
-    {
-      "protocol": "freedom",
-      "tag": "direct"
-    }
-  ]
-}
-EOF
+  sed \
+    -e "s|{{UUID}}|$UUID|g" \
+    -e "s|{{PRIVATE_KEY}}|$PRIVATE_KEY|g" \
+    -e "s|{{SHORT_ID}}|$SHORT_ID|g" \
+    "$template_file" > "$XRAY_CONFIG"
 }
 
 # ---------------- VLESS link + QR ----------------
 generate_vless_link() {
-  local port=443
-  local sni="www.cloudflare.com"
+  local domain
+  if [[ -n "${DOMAIN:-}" ]]; then
+    domain="$DOMAIN"
+  elif [[ -f "$SCRIPT_ROOT/config/domain" ]]; then
+    domain="$(tr -d '[:space:]' < "$SCRIPT_ROOT/config/domain")"
+  else
+    domain="icetea-shinchan.xyz"
+  fi
 
-  VLESS_LINK="vless://${UUID}@${DOMAIN}:${port}?type=tcp&security=reality&encryption=none&flow=xtls-rprx-vision&fp=chrome&sni=${sni}&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}#Reality-${DOMAIN}"
+  VLESS_LINK="vless://${UUID}@${domain}:443?type=tcp&security=reality&encryption=none&flow=xtls-rprx-vision&fp=chrome&sni=www.cloudflare.com&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}#Reality-${domain}"
   echo "$VLESS_LINK"
 }
 
@@ -182,12 +144,10 @@ generate_qr_code() {
 
 # ---------------- Main ----------------
 main() {
-  ensure_domain
   install_xray
   open_ports
   generate_reality_keys
-  render_reality_inbound
-  write_final_config
+  render_config
 
   log "Restarting Xray..."
   systemctl restart xray || err "Systemd restart failed."
@@ -196,7 +156,7 @@ main() {
   link="$(generate_vless_link)"
   generate_qr_code "$link"
 
-  log "Xray Reality on 443 is ready."
+  log "Xray VLESS+XTLS-Vision+Reality on 443 is ready."
 }
 
 main "$@"
