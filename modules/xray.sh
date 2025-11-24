@@ -99,6 +99,9 @@ EOF
 write_final_config() {
   log "Writing Xray final config (overwrite mode)..."
 
+  # HARD RESET: remove old config completely
+  rm -f "$XRAY_CONFIG"
+
   cat > "$XRAY_CONFIG" <<EOF
 {
   "log": {
