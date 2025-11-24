@@ -13,7 +13,8 @@
         "clients": [
           {
             "id": "{{UUID}}",
-            "flow": "xtls-rprx-vision"
+            "flow": "xtls-rprx-vision",
+            "encryption": "none"
           }
         ],
         "decryption": "none",
