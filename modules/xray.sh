@@ -122,6 +122,38 @@ $(cat /tmp/reality_inbound.json)
 EOF
 }
 
+generate_vless_link() {
+  DOMAIN="icetea-shinchan.xyz"
+  PORT=24443
+
+  VLESS_LINK="vless://${UUID}@${DOMAIN}:${PORT}?type=tcp&security=reality&encryption=none&flow=xtls-rprx-vision&fp=chrome&sni=www.cloudflare.com&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}#Reality-${DOMAIN}"
+
+  echo "$VLESS_LINK"
+}
+
+generate_qr_code() {
+  local link="$1"
+
+  if ! command -v qrencode >/dev/null 2>&1; then
+    apt-get update -y
+    apt-get install -y qrencode
+  fi
+  
+  mkdir -p /opt/new_action_x/output
+
+  echo
+  log "Your VLESS Reality link:"
+  echo "$link"
+
+  echo
+  log "QR Code (ANSI):"
+  echo "$link" | qrencode -t ANSIUTF8
+
+  qrencode -o /opt/new_action_x/output/xray_reality_qr.png "$link"
+  log "PNG saved to /opt/new_action_x/output/xray_reality_qr.png"
+}
+
+
 # ---------------- Main run ----------------
 
 log "Xray core already installed."
@@ -136,4 +168,11 @@ write_final_config
 log "Restarting Xray..."
 systemctl restart xray || err "Systemd restart failed."
 
-log "Done."
+# Create VLESS link
+VLESS_LINK="$(generate_vless_link)"
+
+# Generate QR code
+generate_qr_code "$VLESS_LINK"
+
+log "Xray installation complete."
+
