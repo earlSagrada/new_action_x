@@ -1,170 +1,143 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Resolve repo root
 MODULE_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_DIR="$(cd "$MODULE_DIR/.." && pwd)"
 source "$SCRIPT_DIR/modules/common.sh"
 
-XRAY_INBOUND="${XRAY_INBOUND:-reality}"
+XRAY_CONFIG="/usr/local/etc/xray/config.json"
+XRAY_BIN="/usr/local/bin/xray"
 
-install_xray_component() {
-  log "Installing Xray core..."
+TLS_CERT_BASE="/etc/letsencrypt/live/${DOMAIN:-}"
+TLS_CERT_FULLCHAIN="${TLS_CERT_BASE}/fullchain.pem"
+TLS_CERT_PRIVKEY="${TLS_CERT_BASE}/privkey.pem"
 
+install_xray() {
   if ! command -v xray >/dev/null 2>&1; then
-    bash <(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)
+    log "[*] Installing Xray core..."
+    bash <(curl -L https://raw.githubusercontent.com/XTLS/Xray-install/main/install-release.sh)
   else
-    log "Xray binary already installed; skipping core installation."
+    log "[*] Xray core already installed."
   fi
-
-  # qrencode required for QR code output
-  if ! command -v qrencode >/dev/null 2>&1; then
-    log "Installing qrencode..."
-    apt-get update -y
-    apt-get install -y qrencode
-  fi
-
-  # Open port 443
-  if command -v ufw >/dev/null 2>&1; then
-    ufw allow 443/tcp  || true
-    ufw allow 443/udp  || true
-    log "Ensured UFW allows TCP/UDP 443 for Xray Reality."
-  fi
-
-  case "$XRAY_INBOUND" in
-    reality) install_xray_reality_inbound ;;
-    *) err "Unsupported XRAY_INBOUND type: $XRAY_INBOUND"; exit 1 ;;
-  esac
 }
 
-install_xray_reality_inbound() {
-  log "Configuring Xray (VLESS + Reality on TCP/UDP 443, xtls-rprx-vision)..."
+generate_reality_keys() {
+  log "[*] Generating reality keypair..."
+  RAW_OUTPUT=$("${XRAY_BIN}" x25519)
+  PRIVATE_KEY=$(echo "$RAW_OUTPUT" | grep "Private" | awk '{print $2}')
+  PUBLIC_KEY=$(echo "$RAW_OUTPUT" | grep "Public" | awk '{print $2}')
 
-  mkdir -p /usr/local/etc/xray /var/log/xray
+  log "[*] Reality keypair generated:"
+  echo "  PrivateKey: $PRIVATE_KEY"
+  echo "  PublicKey:  $PUBLIC_KEY"
 
-  # Ensure Xray can write logs
-  touch /var/log/xray/access.log /var/log/xray/error.log
-  chmod 644 /var/log/xray/*log
-  chown root:root /var/log/xray/*log
+  UUID=$(cat /proc/sys/kernel/random/uuid)
+  SHORT_ID=$(openssl rand -hex 4)
 
-  local tpl="${SCRIPT_DIR}/config/xray/reality.json.template"
-  local out="/usr/local/etc/xray/config.json"
+  export PRIVATE_KEY PUBLIC_KEY UUID SHORT_ID
+}
 
-  # ---------------- Keypair Generation ----------------
-  log "Generating Reality keypair..."
+render_reality_inbound() {
+  local TEMPLATE="$SCRIPT_DIR/config/xray/reality.json.template"
+  local OUTPUT="/tmp/inbound_reality.json"
 
-  local TMP_KEYS="/tmp/xray_keys_$$.txt"
-  rm -f "$TMP_KEYS"
+  log "[*] Rendering Reality inbound (port 24443)..."
+  render_template "$TEMPLATE" "$OUTPUT" PRIVATE_KEY PUBLIC_KEY UUID SHORT_ID
 
-  if ! xray x25519 >"$TMP_KEYS" 2>&1; then
-    err "xray x25519 failed; raw output:"
-    cat "$TMP_KEYS" || true
-    exit 1
-  fi
+  cat "$OUTPUT"
+}
 
-  log "Raw xray x25519 output:"
-  sed 's/^/    /' "$TMP_KEYS" || true
+render_tls_fallback_inbound() {
+  local OUTPUT="/tmp/inbound_tls_fallback.json"
 
-  # Support new/old Xray key formats
-  local priv_line pub_line hash_line
-  priv_line="$(grep -i 'PrivateKey' "$TMP_KEYS" | head -n1 || true)"
-  pub_line="$(grep -i 'PublicKey'  "$TMP_KEYS" | head -n1 || true)"
-  hash_line="$(grep -i 'Hash32'    "$TMP_KEYS" | head -n1 || true)"
+  log "[*] Rendering TLS fallback inbound (port 443)..."
 
-  REALITY_PRIVATE_KEY="$(printf '%s\n' "$priv_line" | awk -F': *' '{print $2}' || true)"
+  cat > "$OUTPUT" <<EOF
+{
+  "tag": "tls-fallback",
+  "listen": "0.0.0.0",
+  "port": 443,
+  "protocol": "vless",
+  "settings": {
+    "clients": [],
+    "decryption": "none",
+    "fallbacks": [
+      { "dest": 8443, "xver": 0 }
+    ]
+  },
+  "streamSettings": {
+    "network": "tcp",
+    "security": "tls",
+    "tlsSettings": {
+      "alpn": ["http/1.1", "h2"],
+      "certificates": [
+        {
+          "certificateFile": "${TLS_CERT_FULLCHAIN}",
+          "keyFile": "${TLS_CERT_PRIVKEY}"
+        }
+      ]
+    }
+  }
+}
+EOF
 
-  # If PublicKey missing → fallback to Hash32 (new Xray)
-  if [[ -n "${pub_line:-}" ]]; then
-    REALITY_PUBLIC_KEY="$(printf '%s\n' "$pub_line" | awk -F': *' '{print $2}')"
-  else
-    REALITY_PUBLIC_KEY="$(printf '%s\n' "$hash_line" | awk -F': *' '{print $2}')"
-  fi
+  cat "$OUTPUT"
+}
 
-  rm -f "$TMP_KEYS"
+merge_config() {
+  log "[*] Combining TLS fallback + Reality inbound into final config.json..."
 
-  if [[ -z "${REALITY_PRIVATE_KEY:-}" || -z "${REALITY_PUBLIC_KEY:-}" ]]; then
-    err "Failed to parse Reality keypair. Private or public key empty."
-    exit 1
-  fi
+  cat > "$XRAY_CONFIG" <<EOF
+{
+  "log": {
+    "loglevel": "warning",
+    "error": "/var/log/xray/error.log",
+    "access": "/var/log/xray/access.log"
+  },
+  "inbounds": [
+$(cat /tmp/inbound_tls_fallback.json),
+$(cat /tmp/inbound_reality.json)
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ]
+}
+EOF
+}
 
-  UUID="$(cat /proc/sys/kernel/random/uuid)"
-  SHORT_ID="$(openssl rand -hex 4)"
-
-  log "Parsed Reality keys:"
-  log "  PublicKey: $REALITY_PUBLIC_KEY"
-  log "  UUID:      $UUID"
-  log "  ShortId:   $SHORT_ID"
-
-  # ---------------- Render Config ----------------
-  render_template "$tpl" "$out" \
-    REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY UUID SHORT_ID
-
-  chmod 600 "$out"
-  chmod 644 /usr/local/etc/xray/config.json
-
-  # ---------------- Restart Xray ----------------
-  # Ensure Xray runs as root (required for Reality + port 443 + reading config)
-  log "Applying systemd override for Xray..."
-
-  # Ensure override directory exists
-  mkdir -p /etc/systemd/system/xray.service.d
-
-  # Copy override file from repo
-  cp "$SCRIPT_DIR/config/systemd/xray.service.override" \
-    /etc/systemd/system/xray.service.d/override.conf
-
-  systemctl daemon-reload
-
-  XRAY_SERVICE="/etc/systemd/system/xray.service"
-  if grep -q 'User=nobody' "$XRAY_SERVICE"; then
-      sed -i 's/User=nobody/User=root/' "$XRAY_SERVICE"
-      sed -i '/^\[Service\]/a ProtectSystem=off\nProtectHome=off\nPrivateTmp=false\nNoNewPrivileges=false' \
-      /etc/systemd/system/xray.service
-      systemctl daemon-reload
-      log "Patched xray.service to run as root"
-  fi
-
-  sed -i 's/User=nobody/User=root/' /etc/systemd/system/xray.service
-  systemctl daemon-reload
-
-  systemctl enable xray || true
+restart_xray() {
+  log "[*] Restarting Xray..."
   systemctl restart xray
+  sleep 1
+  systemctl status xray --no-pager
+}
 
-  if ! systemctl is-active --quiet xray; then
-    err "Xray failed to start!"
-    journalctl -u xray -n 50 --no-pager || true
+print_client_link() {
+  local LINK="vless://${UUID}@${DOMAIN}:24443?security=reality&encryption=none&type=tcp&flow=xtls-rprx-vision&sni=www.cloudflare.com&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}#Reality-${DOMAIN}"
+  echo
+  echo "[*] Your Reality client link:"
+  echo "$LINK"
+  echo
+}
+
+main() {
+  if [[ -z "${DOMAIN:-}" ]]; then
+    err "DOMAIN environment variable is required!"
     exit 1
   fi
 
-  log "Xray Reality is now active on TCP/UDP 443."
+  install_xray
+  generate_reality_keys
+  render_tls_fallback_inbound
+  render_reality_inbound
+  merge_config
+  restart_xray
+  print_client_link
 
-  # ---------------- V2RayNG Client Link ----------------
-  local HOSTNAME_FOR_LINK="${DOMAIN:-}"
-  if [[ -z "$HOSTNAME_FOR_LINK" ]]; then
-    HOSTNAME_FOR_LINK=$(hostname -I | awk '{print $1}')
-  fi
-
-  local SNI="www.cloudflare.com"
-
-  VLESS_LINK="vless://${UUID}@${HOSTNAME_FOR_LINK}:443?security=reality&encryption=none&flow=xtls-rprx-vision&type=tcp&fp=chrome&sni=${SNI}&pbk=${REALITY_PUBLIC_KEY}&sid=${SHORT_ID}#Reality-${HOSTNAME_FOR_LINK}"
-
-  log "Generated VLESS Reality link:"
-  echo "$VLESS_LINK"
-  echo
-
-  # ---------------- QR Code ----------------
-  local QR_IMG="/root/xray-reality-${HOSTNAME_FOR_LINK}.png"
-  qrencode -o "$QR_IMG" -s 8 "$VLESS_LINK"
-
-  log "QR code saved to: $QR_IMG"
-  echo "Download via:"
-  echo "  scp root@${HOSTNAME_FOR_LINK}:${QR_IMG} ."
-  echo
-
-  qrencode -t ANSIUTF8 "$VLESS_LINK" || true
-  echo
-
-  log "Xray Reality configuration completed."
+  log "[*] Xray setup complete."
 }
 
-install_xray_component "$@"
+main "$@"
