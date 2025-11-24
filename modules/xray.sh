@@ -1,45 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODULE_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT_DIR="$(cd "$MODULE_DIR/.." && pwd)"
-source "$SCRIPT_DIR/modules/common.sh"
-
-XRAY_CONFIG="/usr/local/etc/xray/config.json"
+MODULE_DIR="$(dirname "$0")"
+TEMPLATE_DIR="/opt/new_action_x/config/xray"
 XRAY_BIN="/usr/local/bin/xray"
+XRAY_CONFIG="/usr/local/etc/xray/config.json"
 
-TLS_CERT_BASE="/etc/letsencrypt/live/${DOMAIN:-}"
-TLS_CERT_FULLCHAIN="${TLS_CERT_BASE}/fullchain.pem"
-TLS_CERT_PRIVKEY="${TLS_CERT_BASE}/privkey.pem"
+log() { echo -e "\e[32m[*]\e[0m $*"; }
+err() { echo -e "\e[31m[!]\e[0m $*" >&2; }
 
-install_xray() {
-  if ! command -v xray >/dev/null 2>&1; then
-    log "[*] Installing Xray core..."
-    bash <(curl -L https://raw.githubusercontent.com/XTLS/Xray-install/main/install-release.sh)
-  else
-    log "[*] Xray core already installed."
-  fi
-}
-
+# ---------------- Keypair generation ----------------
 generate_reality_keys() {
-  log "[*] Generating Reality keypair..."
+  log "Generating Reality keypair..."
 
   local TMP_KEYS="/tmp/xray_keys_$$.txt"
   rm -f "$TMP_KEYS"
 
-  # Run x25519 and capture output
-  if ! "${XRAY_BIN}" x25519 >"$TMP_KEYS" 2>&1; then
+  if ! "$XRAY_BIN" x25519 >"$TMP_KEYS" 2>&1; then
     err "xray x25519 failed:"
     cat "$TMP_KEYS" || true
     exit 1
   fi
 
-  log "[*] Raw key output:"
-  sed 's/^/    /' "$TMP_KEYS" || true
-
   # Parse fields
   local priv_line pub_line hash_line
-
   priv_line="$(grep -i 'PrivateKey' "$TMP_KEYS" | head -n1 || true)"
   pub_line="$(grep -i 'PublicKey'  "$TMP_KEYS" | head -n1 || true)"
   hash_line="$(grep -i 'Hash32'    "$TMP_KEYS" | head -n1 || true)"
@@ -54,39 +38,34 @@ generate_reality_keys() {
 
   rm -f "$TMP_KEYS"
 
-  if [[ -z "${PRIVATE_KEY:-}" || -z "${PUBLIC_KEY:-}" ]]; then
-    err "Failed to parse Reality keypair. Parsed values empty."
+  if [[ -z "$PRIVATE_KEY" || -z "$PUBLIC_KEY" ]]; then
+    err "Failed to parse Reality keypair."
     exit 1
   fi
 
   UUID="$(cat /proc/sys/kernel/random/uuid)"
   SHORT_ID="$(openssl rand -hex 4)"
-
-  export PRIVATE_KEY PUBLIC_KEY UUID SHORT_ID
-
-  log "[*] Parsed Reality keys:"
-  log "  PrivateKey: $PRIVATE_KEY"
-  log "  PublicKey:  $PUBLIC_KEY"
-  log "  UUID:       $UUID"
-  log "  ShortId:    $SHORT_ID"
 }
 
-render_reality_inbound() {
-  local TEMPLATE="$SCRIPT_DIR/config/xray/reality.json.template"
-  local OUTPUT="/tmp/inbound_reality.json"
+# ---------------- Template rendering ----------------
+render_template() {
+  local template_file="$1"
+  local output_file="$2"
 
-  log "[*] Rendering Reality inbound (port 24443)..."
-  render_template "$TEMPLATE" "$OUTPUT" PRIVATE_KEY PUBLIC_KEY UUID SHORT_ID
-
-  cat "$OUTPUT"
+  sed \
+    -e "s|{{UUID}}|$UUID|g" \
+    -e "s|{{PRIVATE_KEY}}|$PRIVATE_KEY|g" \
+    -e "s|{{PUBLIC_KEY}}|$PUBLIC_KEY|g" \
+    -e "s|{{SHORT_ID}}|$SHORT_ID|g" \
+    -e "s|{{PORT}}|24443|g" \
+    "$template_file" > "$output_file"
 }
 
-render_tls_fallback_inbound() {
-  local OUTPUT="/tmp/inbound_tls_fallback.json"
+# ---------------- TLS inbound (static) ----------------
+render_tls_inbound() {
+  local out="/tmp/tls_inbound.json"
 
-  log "[*] Rendering TLS fallback inbound (port 443)..."
-
-  cat > "$OUTPUT" <<EOF
+  cat > "$out" <<EOF
 {
   "tag": "tls-fallback",
   "listen": "0.0.0.0",
@@ -106,20 +85,19 @@ render_tls_fallback_inbound() {
       "alpn": ["http/1.1", "h2"],
       "certificates": [
         {
-          "certificateFile": "${TLS_CERT_FULLCHAIN}",
-          "keyFile": "${TLS_CERT_PRIVKEY}"
+          "certificateFile": "/etc/letsencrypt/live/icetea-shinchan.xyz/fullchain.pem",
+          "keyFile": "/etc/letsencrypt/live/icetea-shinchan.xyz/privkey.pem"
         }
       ]
     }
   }
 }
 EOF
-
-  cat "$OUTPUT"
 }
 
-merge_config() {
-  log "[*] Combining TLS fallback + Reality inbound into final config.json..."
+# ---------------- Final config writing ----------------
+write_final_config() {
+  log "Writing Xray final config (overwrite mode)..."
 
   cat > "$XRAY_CONFIG" <<EOF
 {
@@ -128,10 +106,12 @@ merge_config() {
     "error": "/var/log/xray/error.log",
     "access": "/var/log/xray/access.log"
   },
+
   "inbounds": [
-$(cat /tmp/inbound_tls_fallback.json),
-$(cat /tmp/inbound_reality.json)
+$(cat /tmp/tls_inbound.json),
+$(cat /tmp/reality_inbound.json)
   ],
+
   "outbounds": [
     {
       "protocol": "freedom",
@@ -142,36 +122,18 @@ $(cat /tmp/inbound_reality.json)
 EOF
 }
 
-restart_xray() {
-  log "[*] Restarting Xray..."
-  systemctl restart xray
-  sleep 1
-  systemctl status xray --no-pager
-}
+# ---------------- Main run ----------------
 
-print_client_link() {
-  local LINK="vless://${UUID}@${DOMAIN}:24443?security=reality&encryption=none&type=tcp&flow=xtls-rprx-vision&sni=www.cloudflare.com&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}#Reality-${DOMAIN}"
-  echo
-  echo "[*] Your Reality client link:"
-  echo "$LINK"
-  echo
-}
+log "Xray core already installed."
 
-main() {
-  if [[ -z "${DOMAIN:-}" ]]; then
-    err "DOMAIN environment variable is required!"
-    exit 1
-  fi
+generate_reality_keys
 
-  install_xray
-  generate_reality_keys
-  render_tls_fallback_inbound
-  render_reality_inbound
-  merge_config
-  restart_xray
-  print_client_link
+render_tls_inbound
+render_template "$TEMPLATE_DIR/reality.json.template" /tmp/reality_inbound.json
 
-  log "[*] Xray setup complete."
-}
+write_final_config
 
-main "$@"
+log "Restarting Xray..."
+systemctl restart xray || err "Systemd restart failed."
+
+log "Done."

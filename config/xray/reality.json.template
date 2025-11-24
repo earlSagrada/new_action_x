@@ -8,7 +8,7 @@
     {
       "tag": "reality",
       "listen": "0.0.0.0",
-      "port": 24443,
+      "port": {{PORT}},
       "protocol": "vless",
       "settings": {
         "clients": [
