@@ -18,9 +18,6 @@ MODE="interactive"
 DOMAIN=""
 EMAIL=""
 
-# Load shared functions (log, err)
-source "$WORK_DIR/modules/common.sh"
-
 # ------------- Helper: colored echo -------------
 cecho() {
   local color="$1"; shift
@@ -85,6 +82,9 @@ if [[ "${1:-}" != "$INTERNAL_FLAG" ]] || [[ "$CURRENT_DIR" != "$WORK_DIR" ]]; th
   bootstrap_repo "$@"
   # never returns
 fi
+
+# Load shared functions (log, err)
+source "$WORK_DIR/modules/common.sh"
 
 # ------------- Stage 2: actual installer --------
 # We are now:
