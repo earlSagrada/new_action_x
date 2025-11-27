@@ -81,6 +81,7 @@ generate_reality_keys() {
   log "Reality keys:"
   log "  UUID:      $UUID"
   log "  PublicKey: $PUBLIC_KEY"
+  log "  PrivateKey: $PRIVATE_KEY"
   log "  ShortId:   $SHORT_ID"
 }
 
