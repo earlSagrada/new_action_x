@@ -53,23 +53,18 @@ generate_reality_keys() {
     exit 1
   fi
 
-  local priv_line pub_line hash_line
+  local priv_line pass_line
+
   priv_line="$(grep -i 'PrivateKey' "$TMP_KEYS" | head -n1 || true)"
-  pub_line="$(grep -i 'PublicKey'  "$TMP_KEYS" | head -n1 || true)"
-  hash_line="$(grep -i 'Hash32'    "$TMP_KEYS" | head -n1 || true)"
+  pass_line="$(grep -i 'Password'   "$TMP_KEYS" | head -n1 || true)"
 
-  PRIVATE_KEY="$(printf '%s\n' "$priv_line" | awk -F': *' '{print $2}' || true)"
-
-  if [[ -n "${pub_line:-}" ]]; then
-    PUBLIC_KEY="$(printf '%s\n' "$pub_line" | awk -F': *' '{print $2}')"
-  else
-    PUBLIC_KEY="$(printf '%s\n' "$hash_line" | awk -F': *' '{print $2}')"
-  fi
+  PRIVATE_KEY="$(printf '%s\n' "$priv_line" | awk -F': *' '{print $2}')"
+  PUBLIC_KEY="$(printf '%s\n' "$pass_line" | awk -F': *' '{print $2}')"
 
   rm -f "$TMP_KEYS"
 
-  if [[ -z "${PRIVATE_KEY:-}" || -z "${PUBLIC_KEY:-}" ]]; then
-    err "Failed to parse Reality keypair."
+  if [[ -z "$PRIVATE_KEY" || -z "$PUBLIC_KEY" ]]; then
+    err "Failed to parse Reality keypair (PrivateKey/Password missing)."
     exit 1
   fi
 
@@ -79,11 +74,12 @@ generate_reality_keys() {
   export PRIVATE_KEY PUBLIC_KEY UUID SHORT_ID
 
   log "Reality keys:"
-  log "  UUID:      $UUID"
-  log "  PublicKey: $PUBLIC_KEY"
+  log "  UUID:       $UUID"
+  log "  PublicKey:  $PUBLIC_KEY"
   log "  PrivateKey: $PRIVATE_KEY"
-  log "  ShortId:   $SHORT_ID"
+  log "  ShortId:    $SHORT_ID"
 }
+
 
 # ---------------- Render template ----------------
 render_config() {
