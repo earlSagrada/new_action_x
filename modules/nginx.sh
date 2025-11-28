@@ -153,7 +153,7 @@ configure_quic_site() {
   nginx -t
   systemctl reload nginx
 
-  log "Nginx with TLS + HTTP/3/QUIC configured for $DOMAIN (listening on 127.0.0.1:8443)."
+  log "Nginx with TLS + HTTP/3/QUIC configured for $DOMAIN (listening on 0.0.0.0:8443)."
 }
 
 main() {

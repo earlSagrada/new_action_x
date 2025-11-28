@@ -99,9 +99,9 @@ sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
 ### **2. nginx.sh** (QUIC/HTTP/2 with TLS 1.3)
 - Installs latest Nginx with HTTP/2 and QUIC support
 - Obtains Let's Encrypt certificate via certbot
-- Configures **listening on 127.0.0.1:8443** (HTTP/2 + QUIC)
+- Configures **listening on 0.0.0.0:8443** (HTTP/2 + QUIC on all interfaces)
 - Redirects HTTP (80) to HTTPS (443)
-- Sets up reverse proxy framework for AriaNg, Filebrowser, etc.
+- Serves as fallback for Xray Reality (receives non-VLESS traffic on port 443)
 
 ### **3. aria2.sh + ariang.sh**
 - Installs Aria2 daemon with RPC interface on **port 6800**
