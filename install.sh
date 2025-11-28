@@ -131,18 +131,20 @@ banner() {
 usage() {
   cat <<EOF
 Usage:
-  sudo ./install.sh                     # interactive menu
+  sudo ./install.sh                              # interactive menu
   sudo ./install.sh --full   [--domain example.com --email admin@example.com]
   sudo ./install.sh --xray   [--domain example.com --email admin@example.com]
   sudo ./install.sh --update [--domain example.com --email admin@example.com]
+  sudo ./install.sh --update-no-xray [--domain example.com --email admin@example.com]
 
 Options:
-  --full      Full install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray)
-  --xray      Xray-only (VLESS + Reality)
-  --update    Update all components
-  --domain    Primary domain name (used for nginx, certbot, etc.)
-  --email     Email for Let's Encrypt registration
-  -h, --help  Show this help
+  --full             Full install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray with new keys)
+  --xray             Xray-only (VLESS + Reality with new keys)
+  --update           Update all components (keeps existing Xray keys, regenerates QR code only)
+  --update-no-xray   Update all components EXCEPT Xray
+  --domain           Primary domain name (used for nginx, certbot, etc.)
+  --email            Email for Let's Encrypt registration
+  -h, --help         Show this help
 
 If --domain / --email are omitted, you will be prompted interactively.
 EOF
@@ -169,6 +171,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --update)
       MODE="update"
+      shift
+      ;;
+    --update-no-xray)
+      MODE="update-no-xray"
       shift
       ;;
     --domain)
@@ -244,7 +250,7 @@ update_all() {
   banner
   ask_domain_email_if_missing
 
-  cecho green "[*] Updating NEW_ACTION_X components..."
+  cecho green "[*] Updating NEW_ACTION_X components (keeping Xray keys, regenerating QR code only)..."
 
   chmod +x /opt/new_action_x/modules/common.sh
   chmod +x /opt/new_action_x/modules/nginx.sh
@@ -254,9 +260,28 @@ update_all() {
   run_module "ariang.sh"
   run_module "filebrowser.sh"
   run_module "fail2ban.sh"
-  run_module "xray.sh"
+  bash "$MODULE_DIR/xray.sh" --regen
 
-  cecho green "[✓] Update completed."
+  cecho green "[✓] Update completed (Xray keys preserved)."
+  install_health_checks
+}
+
+update_no_xray() {
+  banner
+  ask_domain_email_if_missing
+
+  cecho green "[*] Updating NEW_ACTION_X components (skipping Xray)..."
+
+  chmod +x /opt/new_action_x/modules/common.sh
+  chmod +x /opt/new_action_x/modules/nginx.sh
+  
+  run_module "nginx.sh"
+  run_module "aria2.sh"
+  run_module "ariang.sh"
+  run_module "filebrowser.sh"
+  run_module "fail2ban.sh"
+
+  cecho green "[✓] Update completed (Xray unchanged)."
   install_health_checks
 }
 
@@ -282,8 +307,9 @@ interactive_menu() {
 
 # ------------- Dispatch -------------------------
 case "$MODE" in
-  full)      full_install ;;
-  xray)      xray_only_install ;;
-  update)    update_all ;;
-  *)         interactive_menu ;;
+  full)            full_install ;;
+  xray)            xray_only_install ;;
+  update)          update_all ;;
+  update-no-xray)  update_no_xray ;;
+  *)               interactive_menu ;;
 esac

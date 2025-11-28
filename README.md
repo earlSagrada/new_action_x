@@ -75,9 +75,15 @@ sudo ./install.sh --xray --domain example.com --email admin@example.com
 ```
 
 
-**Update existing installation:**
+**Update all components (keeps Xray keys, regenerates QR only):**
 ```bash
 sudo ./install.sh --update --domain example.com --email admin@example.com
+```
+
+
+**Update all components except Xray:**
+```bash
+sudo ./install.sh --update-no-xray --domain example.com --email admin@example.com
 ```
 
 
@@ -160,7 +166,7 @@ nginx -t
 | Aria2 daemon | `/etc/aria2/aria2.conf` | TCP 6800 (RPC) |
 | AriaNg UI | `/usr/share/ariang/` | Proxied via Nginx |
 | Filebrowser | `/etc/filebrowser/filebrowser.json` | TCP 8080 (proxied via Nginx) |
-| Nginx QUIC configs | `/etc/nginx/conf.d/` or `/etc/nginx/sites-available/` | TCP/UDP 8443 (localhost) |
+| Nginx QUIC configs | `/etc/nginx/conf.d/` or `/etc/nginx/sites-available/` | TCP/UDP 8443 (all interfaces) |
 | Fail2ban jails | `/etc/fail2ban/jail.d/` | — |
 
 ---
@@ -214,13 +220,26 @@ To pull new updates:
 
 ```bash
 git pull origin main
-sudo ./install.sh --update
+sudo ./install.sh --update --domain example.com --email admin@example.com
 ```
 
-The update mode will:
-- Reapply updated configs
-- Restart services
-- Preserve existing keys and settings
+### Update Options
+
+**`--update` (default update mode):**
+- Updates nginx, aria2, ariang, filebrowser, fail2ban
+- Preserves existing Xray keys (UUID, private/public keys, short ID)
+- Regenerates Xray QR code only via `xray.sh --regen`
+- Restarts all services
+
+**`--update-no-xray`:**
+- Updates all components EXCEPT Xray
+- Leaves Xray completely untouched
+- Useful when you only want to update other services
+
+**`--full` (full reinstall with new keys):**
+- Regenerates all Xray keys (UUID, private/public keys, short ID)
+- Reinstalls/updates all other components
+- Use this when you want fresh Xray credentials
 
 ---
 
