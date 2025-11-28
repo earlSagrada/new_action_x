@@ -89,32 +89,37 @@ sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
 ---
 
 ## ⚙️ How the Modules Work
-### **1. xray.sh** (VLESS + Reality on UDP/443)
+### **1. xray.sh** (VLESS + Reality on TCP/443)
 - Installs Xray-core
-- Generates private key, public key, short id
-- Creates VLESS-Reality inbound
-- Writes systemd service
-- Generates **client config + QR code** stored under `/etc/xray/client/`
+- Generates private key, public key, UUID, and short ID
+- Creates VLESS-Reality inbound on **TCP/443** with fallback to port **8443** (Nginx)
+- Generates VLESS connection link + QR code stored under `output/xray_reality_qr.png`
+- Writes systemd service (`/etc/systemd/system/xray.service`)
 
-### **2. nginx.sh** (QUIC/HTTP3)
-- Installs latest Nginx
-- Enables `quic`, `http3`, `tlsv1.3`
-- Configures reverse proxy structure
+### **2. nginx.sh** (QUIC/HTTP/2 with TLS 1.3)
+- Installs latest Nginx with HTTP/2 and QUIC support
+- Obtains Let's Encrypt certificate via certbot
+- Configures **listening on 127.0.0.1:8443** (HTTP/2 + QUIC)
+- Redirects HTTP (80) to HTTPS (443)
+- Sets up reverse proxy framework for AriaNg, Filebrowser, etc.
 
 ### **3. aria2.sh + ariang.sh**
-- Deploys Aria2 daemon + RPC interface
-- Deploys AriaNg UI via Nginx
-- Uses your `aria2.conf.template`
+- Installs Aria2 daemon with RPC interface on **port 6800**
+- Deploys AriaNg UI (static web UI) via Nginx proxy
+- Downloads stored in `/var/www/{DOMAIN}/downloads/`
+- Uses RPC secret for authentication
 
 ### **4. filebrowser.sh**
-- Deploys Filebrowser binary
-- Uses your template config and sets up a systemd service
+- Installs Filebrowser binary
+- Runs on **port 8080** (internally) and exposed via Nginx proxy
+- Provides file manager access to downloads directory
+- Default credentials: admin/admin (change recommended)
 
 ### **5. fail2ban.sh**
-- Installs Fail2ban
-- Adds a strict jail:
-    - Ban IP for **10 days**
-    - Trigger if 3 failures within **48 hours**
+- Installs Fail2ban with strict jails for security
+- **Xray Reality jail**: monitors Xray errors via systemd logs
+- **Nginx jail**: monitors HTTP error responses (400/401/403/404)
+- Ban policy: **3 failures within 48 hours → 10-day ban**
 
 ---
 
@@ -147,29 +152,42 @@ nginx -t
 ---
 
 ## 🔧 Configuration Locations
-| Component | Config Path |
-|----------|-------------|
-| Xray inbound | `/etc/xray/config.json` |
-| Xray client configs | `/etc/xray/client/` |
-| Aria2 core | `/etc/aria2/aria2.conf` |
-| AriaNg UI | `/usr/share/ariang/` |
-| Filebrowser | `/etc/filebrowser/filebrowser.json` |
-| Nginx QUIC configs | `/etc/nginx/conf.d/` |
-| Fail2ban jail | `/etc/fail2ban/jail.local` |
+| Component | Config Path | Listen |
+|----------|-------------|--------|
+| Xray inbound | `/etc/xray/config.json` | TCP 443 (with fallback to 8443) |
+| Xray logs | `/var/log/xray/` | — |
+| Xray QR code | `output/xray_reality_qr.png` | — |
+| Aria2 daemon | `/etc/aria2/aria2.conf` | TCP 6800 (RPC) |
+| AriaNg UI | `/usr/share/ariang/` | Proxied via Nginx |
+| Filebrowser | `/etc/filebrowser/filebrowser.json` | TCP 8080 (proxied via Nginx) |
+| Nginx QUIC configs | `/etc/nginx/conf.d/` or `/etc/nginx/sites-available/` | TCP/UDP 8443 (localhost) |
+| Fail2ban jails | `/etc/fail2ban/jail.d/` | — |
 
 ---
 
-## 🔑 Regenerate Client QR Code
-You can re-run just the Xray module:
+## 🔑 Regenerate Client QR Code & Keys
 
+### Regenerate QR code only (keep existing keys):
 ```bash
 sudo bash modules/xray.sh --regen
 ```
+This will:
+- Read existing UUID, Private Key, Public Key, Short ID from config
+- Generate a fresh QR code
+- **Does NOT** restart Xray or change any keys
 
-It will:
-- Read existing keys
-- Recreate client.json
-- Produce a fresh QR code
+### Regenerate all keys (new UUID, keys, short ID):
+```bash
+sudo bash modules/xray.sh --regen-keys
+```
+This will:
+- Generate completely new Reality keys
+- Update Xray config
+- Restart Xray service
+- Generate new QR code
+- Save public key for future `--regen` use
+
+The QR code PNG is saved to: `output/xray_reality_qr.png`
 
 ---
 

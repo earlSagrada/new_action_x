@@ -101,6 +101,47 @@ render_config() {
     "$template_file" > "$XRAY_CONFIG"
 }
 
+# ---------------- Load existing keys from config ----------------
+load_existing_keys() {
+  if [[ ! -f "$XRAY_CONFIG" ]]; then
+    err "Xray config not found: $XRAY_CONFIG"
+    return 1
+  fi
+
+  log "Loading existing keys from config..."
+
+  UUID="$(grep -o '"id": "[^"]*"' "$XRAY_CONFIG" | head -n1 | cut -d'"' -f4)"
+  PRIVATE_KEY="$(grep -o '"privateKey": "[^"]*"' "$XRAY_CONFIG" | head -n1 | cut -d'"' -f4)"
+  SHORT_ID="$(grep -o '"shortIds": \[.*\]' "$XRAY_CONFIG" | grep -o '"[^"]*"' | head -n1 | tr -d '"')"
+
+  if [[ -f "$SCRIPT_ROOT/config/xray_public_key" ]]; then
+    PUBLIC_KEY="$(cat "$SCRIPT_ROOT/config/xray_public_key")"
+  else
+    err "Public key file not found. Cannot regenerate QR code."
+    return 1
+  fi
+
+  if [[ -z "$UUID" || -z "$PRIVATE_KEY" || -z "$SHORT_ID" || -z "$PUBLIC_KEY" ]]; then
+    err "Failed to load all keys from config."
+    return 1
+  fi
+
+  export UUID PRIVATE_KEY SHORT_ID PUBLIC_KEY
+
+  log "Keys loaded successfully:"
+  log "  UUID:       $UUID"
+  log "  PublicKey:  $PUBLIC_KEY"
+  log "  PrivateKey: $PRIVATE_KEY"
+  log "  ShortId:    $SHORT_ID"
+}
+
+# ---------------- Save public key for later use ----------------
+save_public_key() {
+  mkdir -p "$SCRIPT_ROOT/config"
+  echo "$PUBLIC_KEY" > "$SCRIPT_ROOT/config/xray_public_key"
+  log "Public key saved to: $SCRIPT_ROOT/config/xray_public_key"
+}
+
 # ---------------- VLESS link + QR ----------------
 generate_vless_link() {
   local domain
@@ -139,11 +180,48 @@ generate_qr_code() {
   log "QR Code PNG saved to: $png"
 }
 
+# ---------------- Regenerate QR code only ----------------
+regen_qr_code_only() {
+  log "Regenerating QR code only (keeping existing keys)..."
+  
+  if ! load_existing_keys; then
+    err "Cannot regenerate QR code without existing keys."
+    exit 1
+  fi
+
+  local link
+  link="$(generate_vless_link)"
+  generate_qr_code "$link"
+
+  log "QR code regenerated successfully."
+}
+
+# ---------------- Regenerate all keys ----------------
+regen_all_keys() {
+  log "Regenerating all keys (UUID, PrivateKey, PublicKey, ShortId)..."
+  
+  install_xray
+  open_ports
+  generate_reality_keys
+  save_public_key
+  render_config
+
+  log "Restarting Xray..."
+  systemctl restart xray || err "Systemd restart failed."
+
+  local link
+  link="$(generate_vless_link)"
+  generate_qr_code "$link"
+
+  log "All keys regenerated and Xray restarted."
+}
+
 # ---------------- Main ----------------
 main() {
   install_xray
   open_ports
   generate_reality_keys
+  save_public_key
   render_config
 
   log "Restarting Xray..."
@@ -156,4 +234,15 @@ main() {
   log "Xray VLESS+XTLS-Vision+Reality on 443 is ready."
 }
 
-main "$@"
+# ------------- Argument parsing --------
+case "${1:-}" in
+  --regen)
+    regen_qr_code_only
+    ;;
+  --regen-keys)
+    regen_all_keys
+    ;;
+  *)
+    main "$@"
+    ;;
+esac
