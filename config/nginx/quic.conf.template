@@ -32,9 +32,9 @@ server {
         index index.html;
     }
 
-    # Aria2 RPC endpoint
-    location /jsonrpc {
-        proxy_pass http://127.0.0.1:6800;
+    # Workaround for AriaNg malformed requests - match /jsonrpc:PORT/jsonrpc
+    location ~ /jsonrpc:[0-9]+/jsonrpc$ {
+        proxy_pass http://127.0.0.1:6800/jsonrpc;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -54,8 +54,8 @@ server {
         }
     }
 
-    # Workaround for AriaNg malformed requests with :6800 in path
-    location ~ ^/jsonrpc:(\d+)/jsonrpc$ {
+    # Aria2 RPC endpoint
+    location /jsonrpc {
         proxy_pass http://127.0.0.1:6800;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
