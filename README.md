@@ -111,6 +111,7 @@ sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
 
 ### **3. aria2.sh + ariang.sh**
 - Installs Aria2 daemon with RPC interface on **port 6800**
+    - One-time admin message: the installer prints the rpc-secret to the console during installation so you can copy it; the installer also stores a one-time marker at `/etc/aria2/.rpc_secret_shown` to avoid reprinting.
 - Deploys AriaNg UI (static web UI) via Nginx proxy
 - Downloads stored in `/var/www/{DOMAIN}/downloads/`
 - Uses RPC secret for authentication

@@ -56,6 +56,33 @@ install_aria2_component() {
   fi
 
   log "aria2 installed and running."
+
+  # One-time admin message: print the rpc-secret so the admin can copy it
+  local shown_marker="$ARIA2_CONF_DIR/.rpc_secret_shown"
+  if [[ ! -f "$shown_marker" ]]; then
+    cat <<MSG
+
+=============================================================
+Aria2 RPC secret (one-time display):
+
+    ${RPC_SECRET}
+
+IMPORTANT: Keep this secret safe. Use it in AriaNg settings as the
+"Secret Token" (paste exactly as shown, no extra prefix). We do NOT
+store this visibly in the web UI; this output is shown once during
+installation so you can save it securely.
+
+The secret was written to: ${ARIA2_CONF}
+To show this message again, view ${ARIA2_CONF} or the system service
+files. DO NOT share the secret publicly.
+=============================================================
+
+MSG
+    # create a marker so message is displayed only once
+    mkdir -p "$ARIA2_CONF_DIR"
+    printf '%s\n' "${RPC_SECRET}" > "$shown_marker"
+    chmod 600 "$shown_marker" || true
+  fi
 }
 
 install_aria2_component "$@"
