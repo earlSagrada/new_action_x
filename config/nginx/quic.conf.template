@@ -34,7 +34,10 @@ server {
 
     # Workaround for AriaNg malformed requests - match /jsonrpc:PORT/jsonrpc
     location ~ ^/jsonrpc:[0-9]+/jsonrpc$ {
-        proxy_pass http://127.0.0.1:6800;
+        # AriaNg sometimes sends malformed requests to /jsonrpc:PORT/jsonrpc
+        # Rewrite to the actual aria2 jsonrpc path on the backend so it doesn't
+        # forward the extra ":PORT" chunk and cause a 404.
+        proxy_pass http://127.0.0.1:6800/jsonrpc;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";

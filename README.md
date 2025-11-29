@@ -153,6 +153,18 @@ journalctl -u xray -f
 ### Validate Nginx config
 ```
 nginx -t
+
+### AriaNg common pitfall — wrong connection host/port
+
+If AriaNg reports "disconnected" while aria2 is running and reachable locally, make sure the UI connection uses your public domain + path /jsonrpc (NOT 127.0.0.1:6800). Example AriaNg settings:
+
+- Host: icetea-shinchan.xyz
+- Port: (leave blank or 443)
+- Secure/TLS: ON
+- Path: /jsonrpc
+- Token: <your rpc-secret value>
+
+If you put a host value like `icetea-shinchan.xyz:6800` or `127.0.0.1:6800`, AriaNg will sometimes attempt malformed URLs like `/jsonrpc:6800/jsonrpc` and Nginx will return 404. Our Nginx templates include a workaround, but the correct UI setting is to use the domain (or leave the port blank when using HTTPS) and the path `/jsonrpc`.
 ```
 
 ---

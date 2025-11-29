@@ -38,6 +38,17 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # Workaround for AriaNg malformed requests which sometimes send
+    # /jsonrpc:PORT/jsonrpc — rewrite these to the correct /jsonrpc path
+    # so the backend aria2 receives a clean request.
+    location ~ ^/jsonrpc:[0-9]+/jsonrpc$ {
+        proxy_pass http://127.0.0.1:6800/jsonrpc;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+
     location /jsonrpc {
         proxy_pass http://127.0.0.1:6800;
         proxy_http_version 1.1;
