@@ -54,8 +54,8 @@ server {
         }
     }
 
-    # Aria2 RPC endpoint
-    location /jsonrpc {
+    # Aria2 RPC endpoint (exact prefix match, no regex fallthrough)
+    location ^~ /jsonrpc {
         proxy_pass http://127.0.0.1:6800;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
