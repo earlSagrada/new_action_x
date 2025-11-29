@@ -166,6 +166,21 @@ If AriaNg reports "disconnected" while aria2 is running and reachable locally, m
 - Token: <your rpc-secret value>
 
 If you put a host value like `icetea-shinchan.xyz:6800` or `127.0.0.1:6800`, AriaNg will sometimes attempt malformed URLs like `/jsonrpc:6800/jsonrpc` and Nginx will return 404. Our Nginx templates include a workaround, but the correct UI setting is to use the domain (or leave the port blank when using HTTPS) and the path `/jsonrpc`.
+
+### ✅ New: automatic safe defaults for AriaNg (fix for port 6800 showing)
+
+We install a small helper `aria-defaults.js` into the AriaNg distribution that tries to ensure a first-run browser will use the same-origin host, clear any hard-coded `:6800` port entries, and set the path to `/jsonrpc` when appropriate.
+
+How to verify after installation:
+
+- Open a fully-clean browser (incognito) and navigate to `https://<your-domain>/ariang/`.
+- The Connection settings should show:
+    - Host: `<your-domain>`
+    - Port: (blank)
+    - Secure/TLS: ON
+    - Path: `/jsonrpc`
+
+If you still see `6800` shown in the Port field, try a hard refresh (Ctrl+Shift+R) or clear site storage for the domain. If that doesn't help, please inspect `Network` in DevTools and confirm `aria-defaults.js` is being served from `/ariang/aria-defaults.js` and runs before AriaNg's main scripts.
 ```
 
 ---

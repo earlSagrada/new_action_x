@@ -50,7 +50,7 @@ install_ariang_component() {
   # (Option 1) — do NOT inject rpc-secret; this keeps the secret safe.
   local defaults_js="$ARIANG_DIR/aria-defaults.js"
   cat > "$defaults_js" <<'EOF'
-// AriaNg safe defaults injector (installed by new_action_x)
+  // AriaNg safe defaults injector (installed by new_action_x)
 // - Sets same-origin host, prefers HTTPS where applicable, clears port to use default
 // - Sets the default path to /jsonrpc
 // This script auto-fills the settings UI on first visit and does NOT store secrets.
@@ -67,6 +67,25 @@ install_ariang_component() {
   }
 
   // Try to patch any JSON config objects in localStorage that look like RPC settings.
+  // Helper: recursively replace :6800 occurrences in arbitrary objects/strings
+  function walkReplace(obj) {
+    try {
+      if (obj === null || obj === undefined) return obj;
+      if (typeof obj === 'string') {
+        // replace common loopback with current hostname and strip bare :6800
+        return obj.replace(/127\.0\.0\.1:6800/g, host)
+                  .replace(/localhost:6800/g, host)
+                  .replace(/:6800(?![0-9])/g, '');
+      }
+      if (Array.isArray(obj)) return obj.map(walkReplace);
+      if (typeof obj === 'object') {
+        Object.keys(obj).forEach(function(k){ obj[k] = walkReplace(obj[k]); });
+        return obj;
+      }
+    } catch(e){ /* best effort */ }
+    return obj;
+  }
+
   function applyLocalStorageDefaults() {
     try {
       if (!window.localStorage) return;
@@ -81,20 +100,34 @@ install_ariang_component() {
           var obj = JSON.parse(raw);
           if (obj && typeof obj === 'object') {
             var changed = false;
-            // check common fields
+            // check common fields and fallback: run a recursive sanitize pass
             var hostFields = ['host','address','server','rpcHost','rpcAddress'];
             hostFields.forEach(function(f){
               if (f in obj) {
                 if (!obj[f] || /:6800/.test(obj[f]) || /127\.0\.0\.1:6800/.test(obj[f])) { obj[f] = host; changed = true; }
               }
             });
-            if ('port' in obj && (obj.port === '6800' || obj.port === 6800 || obj.port === '')) { obj.port = ''; changed = true; }
+            if ('port' in obj && (obj.port === '6800' || obj.port === 6800)) { obj.port = ''; changed = true; }
             if ('path' in obj && (!obj.path || obj.path === '/')) { obj.path = '/jsonrpc'; changed = true; }
+            // recursive sanitization of any strings containing :6800
+            try {
+              var cleaned = walkReplace(obj);
+              if (JSON.stringify(cleaned) !== JSON.stringify(obj)) { obj = cleaned; changed = true; }
+            } catch(e){ /* best effort */ }
+
             if (changed) {
               try { localStorage.setItem(key, JSON.stringify(obj)); } catch(e) { /* best effort */ }
             }
           }
-        } catch(e) { /* not JSON */ }
+        } catch(e) {
+          // If value is not JSON but contains :6800 (eg. legacy string), replace it.
+          try {
+            if (/(:6800|127\.0\.0\.1:6800|localhost:6800)/.test(raw)) {
+              var raw2 = raw.replace(/127\.0\.0\.1:6800/g, host).replace(/localhost:6800/g, host).replace(/:6800(?![0-9])/g, '');
+              localStorage.setItem(key, raw2);
+            }
+          } catch(e2){ /* best effort */ }
+        }
       }
     } catch(e) { /* ignore */ }
   }
@@ -115,8 +148,16 @@ install_ariang_component() {
         // pick first candidate that isn't hidden
         var hi = hostCandidates.find(function(el){ return el.offsetParent !== null && el.type !== 'hidden'; }) || hostCandidates[0];
         // only override if empty or contains ':6800' or is '127.0.0.1:6800'
-        if(hi && (!hi.value || /:6800/.test(hi.value) || /127\.0\.0\.1:6800/.test(hi.value))) {
-          setField(hi, host);
+        if(hi) {
+          // If the current value looks like it includes :6800, or is empty, overwrite.
+          if(!hi.value || /:6800/.test(hi.value) || /127\.0\.0\.1:6800/.test(hi.value)) {
+            setField(hi, host);
+          } else {
+            // If the value still contains a port anywhere, try to sanitize it.
+            if(/:6800/.test(hi.value)) {
+              setField(hi, (hi.value||'').replace(/:6800/g, ''));
+            }
+          }
         }
       }
 
@@ -126,8 +167,14 @@ install_ariang_component() {
       });
       if(pathCandidates.length){
         var pi = pathCandidates.find(function(el){ return el.offsetParent !== null; }) || pathCandidates[0];
-        if(pi && (!pi.value || pi.value === '/' || !/jsonrpc/i.test(pi.value))){
-          setField(pi, '/jsonrpc');
+        if(pi){
+          if(!pi.value || pi.value === '/' || !/jsonrpc/i.test(pi.value)){
+            setField(pi, '/jsonrpc');
+          } else if(/:6800/.test(pi.value)) {
+            // strip stray :6800 that some malformed UIs store in path fields
+            setField(pi, (pi.value||'').replace(/:6800/g, ''));
+          }
+        }
         }
       }
 
@@ -138,8 +185,15 @@ install_ariang_component() {
       if(portCandidates.length){
         var pti = portCandidates.find(function(el){ return el.offsetParent !== null; }) || portCandidates[0];
         // Clear default 6800 (or any non-empty value) so browser uses default HTTPS port
-        if(pti && (pti.value === '6800' || pti.value)){
-          setField(pti, '');
+        if(pti){
+          try {
+            // Force-clear the port field and also override attribute/defaultValue
+            if(pti.value === '6800' || pti.value) {
+              setField(pti, '');
+              pti.defaultValue = '';
+              pti.setAttribute && pti.setAttribute('value', '');
+            }
+          } catch(e) { /* best effort */ }
         }
       }
 
@@ -154,6 +208,7 @@ install_ariang_component() {
           var opt = proto.options[oi];
           if(/https/i.test(opt.value||opt.text)){
             proto.value = opt.value;
+            proto.selectedIndex = oi;
             proto.dispatchEvent(new Event('change', { bubbles: true }));
             break;
           }
@@ -180,17 +235,19 @@ install_ariang_component() {
     try { applyLocalStorageDefaults(); } catch(e) {}
     // try immediately
     if(applyOnce()) return;
-    // observe DOM mutations for a while
+    // observe DOM mutations for a while and retry for longer so frameworks that set values
+    // asynchronously are still overridden.
     observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
-    // fallback retries
+    // fallback retries (extended)
     var tries = 0;
     var id = setInterval(function(){
       tries++;
-      if(applyOnce() || tries > 10) {
+      try { applyLocalStorageDefaults(); } catch(e){}
+      if(applyOnce() || tries > 50) {
         clearInterval(id);
         observer.disconnect();
       }
-    }, 300);
+    }, 250);
   }
 
   if(document.readyState === 'loading'){
@@ -206,8 +263,13 @@ EOF
   local index_html="$ARIANG_DIR/index.html"
   if [[ -f "$index_html" ]]; then
     if ! grep -q "aria-defaults.js" "$index_html" 2>/dev/null; then
-      # Insert before closing </body>
-      awk 'BEGIN{added=0} /<\/body>/{ if(!added){ print "    <script src=\"/ariang/aria-defaults.js\"></script>"; added=1 } } {print}' "$index_html" > "$index_html.tmp" && mv "$index_html.tmp" "$index_html"
+      # Insert as early as possible so our defaults run before AriaNg initializes.
+      # Prefer placing inside <head>, otherwise fall back to before </body>.
+      if grep -qi "<head" "$index_html"; then
+        awk 'BEGIN{added=0} /<\/head>/{ if(!added){ print "    <script src=\"/ariang/aria-defaults.js\"></script>"; added=1 } } {print}' "$index_html" > "$index_html.tmp" && mv "$index_html.tmp" "$index_html"
+      else
+        awk 'BEGIN{added=0} /<\/body>/{ if(!added){ print "    <script src=\"/ariang/aria-defaults.js\"></script>"; added=1 } } {print}' "$index_html" > "$index_html.tmp" && mv "$index_html.tmp" "$index_html"
+      fi
       log "Injected aria-defaults.js into index.html"
     fi
   fi
