@@ -116,21 +116,56 @@ install_ariang_component() {
             } catch(e){ /* best effort */ }
 
             if (changed) {
-              try { localStorage.setItem(key, JSON.stringify(obj)); } catch(e) { /* best effort */ }
+              try { localStorage.setItem(key, JSON.stringify(obj)); console.info && console.info('[aria-defaults] sanitized localStorage key:', key); } catch(e) { /* best effort */ }
             }
           }
         } catch(e) {
           // If value is not JSON but contains :6800 (eg. legacy string), replace it.
-          try {
+            try {
             if (/(:6800|127\.0\.0\.1:6800|localhost:6800)/.test(raw)) {
               var raw2 = raw.replace(/127\.0\.0\.1:6800/g, host).replace(/localhost:6800/g, host).replace(/:6800(?![0-9])/g, '');
               localStorage.setItem(key, raw2);
+              console.info && console.info('[aria-defaults] sanitized plain key:', key);
             }
           } catch(e2){ /* best effort */ }
         }
       }
     } catch(e) { /* ignore */ }
   }
+
+  // Monkeypatch localStorage.setItem/getItem so any future writes are sanitized.
+  (function(){
+    try {
+      var originalSet = Storage.prototype.setItem;
+      var originalGet = Storage.prototype.getItem;
+      Storage.prototype.setItem = function(k, v){
+        try {
+          if (!k || /token|secret|auth|password/i.test(k)) {
+            return originalSet.call(this, k, v);
+          }
+          if (typeof v === 'string') {
+            // clean values containing :6800 or common loopback:6800
+            var before = v;
+            v = v.replace(/127\.0\.0\.1:6800/g, host).replace(/localhost:6800/g, host).replace(/:6800(?![0-9])/g, '');
+            if (before !== v) console.debug && console.debug('[aria-defaults] setItem sanitised:', k);
+          }
+        } catch(e) { /* best-effort */ }
+        return originalSet.call(this, k, v);
+      };
+
+      Storage.prototype.getItem = function(k){
+        try {
+          var v = originalGet.call(this, k);
+          if (!k || /token|secret|auth|password/i.test(k)) return v;
+          if (typeof v === 'string' && /:6800/.test(v)) {
+            console.debug && console.debug('[aria-defaults] getItem sanitized:', k);
+            return v.replace(/127\.0\.0\.1:6800/g, host).replace(/localhost:6800/g, host).replace(/:6800(?![0-9])/g, '');
+          }
+          return v;
+        } catch(e){ return originalGet.call(this, k); }
+      };
+    } catch(e) { /* ignore if not supported */ }
+  })();
 
   function applyOnce() {
     try {
@@ -282,9 +317,9 @@ EOF
       if ! grep -q "aria-defaults-inline" "$index_html" 2>/dev/null; then
         local tmpfile="$index_html.tmp2"
         if grep -qi "<head" "$index_html"; then
-          awk 'BEGIN{added=0} /<\/head>/{ if(!added){ print "    <script id=\"aria-defaults-inline\">(function(){try{var h=location.hostname||''; for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i); if(!k) continue; try{ var v=localStorage.getItem(k); if(/(:6800|127\\.0\\.0\\.1:6800|localhost:6800)/.test(v) && !/token|secret|auth|password/i.test(k)){ localStorage.setItem(k, v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,'')); } }catch(e){} } }catch(e){} })();</script>"; added=1 } } {print}' "$index_html" > "$tmpfile" && mv "$tmpfile" "$index_html"
+          awk 'BEGIN{added=0} /<\/head>/{ if(!added){ print "    <script id=\"aria-defaults-inline\">(function(){try{var h=location.hostname||''; /* sanitize existing values */ for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i); if(!k) continue; try{ var v=localStorage.getItem(k); if(/(:6800|127\\.0\\.0\\.1:6800|localhost:6800)/.test(v) && !/token|secret|auth|password/i.test(k)){ localStorage.setItem(k, v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,'')); } }catch(e){} } /* also monkeypatch setItem/getItem to sanitize future writes */ try{ var oSet=Storage.prototype.setItem, oGet=Storage.prototype.getItem; Storage.prototype.setItem=function(k,v){ try{ if(!k||/token|secret|auth|password/i.test(k)) return oSet.call(this,k,v); if(typeof v==='string') v=v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,''); }catch(e){} return oSet.call(this,k,v); }; Storage.prototype.getItem=function(k){ try{ var v=oGet.call(this,k); if(!k||/token|secret|auth|password/i.test(k)) return v; if(typeof v==='string'&&/:6800/.test(v)) return v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,''); return v;}catch(e){return oGet.call(this,k);} }; }catch(e){} })();</script>"; added=1 } } {print}' "$index_html" > "$tmpfile" && mv "$tmpfile" "$index_html"
         else
-          awk 'BEGIN{added=0} /<\/body>/{ if(!added){ print "    <script id=\"aria-defaults-inline\">(function(){try{var h=location.hostname||''; for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i); if(!k) continue; try{ var v=localStorage.getItem(k); if(/(:6800|127\\.0\\.0\\.1:6800|localhost:6800)/.test(v) && !/token|secret|auth|password/i.test(k)){ localStorage.setItem(k, v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,'')); } }catch(e){} } }catch(e){} })();</script>"; added=1 } } {print}' "$index_html" > "$tmpfile" && mv "$tmpfile" "$index_html"
+          awk 'BEGIN{added=0} /<\/body>/{ if(!added){ print "    <script id=\"aria-defaults-inline\">(function(){try{var h=location.hostname||''; /* sanitize existing values */ for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i); if(!k) continue; try{ var v=localStorage.getItem(k); if(/(:6800|127\\.0\\.0\\.1:6800|localhost:6800)/.test(v) && !/token|secret|auth|password/i.test(k)){ localStorage.setItem(k, v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,'')); } }catch(e){} } /* also monkeypatch setItem/getItem to sanitize future writes */ try{ var oSet=Storage.prototype.setItem, oGet=Storage.prototype.getItem; Storage.prototype.setItem=function(k,v){ try{ if(!k||/token|secret|auth|password/i.test(k)) return oSet.call(this,k,v); if(typeof v==='string') v=v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,''); }catch(e){} return oSet.call(this,k,v); }; Storage.prototype.getItem=function(k){ try{ var v=oGet.call(this,k); if(!k||/token|secret|auth|password/i.test(k)) return v; if(typeof v==='string'&&/:6800/.test(v)) return v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,''); return v;}catch(e){return oGet.call(this,k);} }; }catch(e){} })();</script>"; added=1 } } {print}' "$index_html" > "$tmpfile" && mv "$tmpfile" "$index_html"
         fi
         log "Injected inline aria-defaults sanitizer into index.html"
       fi
