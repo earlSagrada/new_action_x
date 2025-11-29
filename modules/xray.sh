@@ -5,6 +5,9 @@ MODULE_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_ROOT="$(cd "$MODULE_DIR/.." && pwd)"
 TEMPLATE_DIR="$SCRIPT_ROOT/config/xray"
 
+# Configuration style: "xhttp" (default) or "tcp" (old xtls-vision)
+CONFIG_STYLE="${CONFIG_STYLE:-xhttp}"
+
 XRAY_BIN="/usr/local/bin/xray"
 XRAY_CONFIG="/usr/local/etc/xray/config.json"
 
@@ -23,20 +26,31 @@ install_xray() {
 
 # ---------------- Firewall ----------------
 open_ports() {
-  log "Ensuring firewall allows 443 and 8443 (TCP/UDP)..."
+  if [[ "$CONFIG_STYLE" == "xhttp" ]]; then
+    log "Ensuring firewall allows 8500 (TCP/UDP) for XHTTP+Reality..."
+    PORT=8500
+  else
+    log "Ensuring firewall allows 443 and 8443 (TCP/UDP) for TCP+XTLS-Vision+Reality..."
+    PORT=443
+    PORT_FALLBACK=8443
+  fi
 
   if command -v ufw >/dev/null 2>&1; then
-    ufw allow 443/tcp || true
-    ufw allow 443/udp || true
-    ufw allow 8443/tcp || true
-    ufw allow 8443/udp || true
+    ufw allow $PORT/tcp || true
+    ufw allow $PORT/udp || true
+    if [[ -n "${PORT_FALLBACK:-}" ]]; then
+      ufw allow $PORT_FALLBACK/tcp || true
+      ufw allow $PORT_FALLBACK/udp || true
+    fi
   fi
 
   if command -v iptables >/dev/null 2>&1; then
-    iptables -I INPUT -p tcp --dport 443  -j ACCEPT || true
-    iptables -I INPUT -p udp --dport 443  -j ACCEPT || true
-    iptables -I INPUT -p tcp --dport 8443 -j ACCEPT || true
-    iptables -I INPUT -p udp --dport 8443 -j ACCEPT || true
+    iptables -I INPUT -p tcp --dport $PORT -j ACCEPT || true
+    iptables -I INPUT -p udp --dport $PORT -j ACCEPT || true
+    if [[ -n "${PORT_FALLBACK:-}" ]]; then
+      iptables -I INPUT -p tcp --dport $PORT_FALLBACK -j ACCEPT || true
+      iptables -I INPUT -p udp --dport $PORT_FALLBACK -j ACCEPT || true
+    fi
   fi
 }
 
@@ -83,14 +97,20 @@ generate_reality_keys() {
 
 # ---------------- Render template ----------------
 render_config() {
-  local template_file="$TEMPLATE_DIR/reality.json.template"
+  local template_file
+
+  if [[ "$CONFIG_STYLE" == "xhttp" ]]; then
+    template_file="$TEMPLATE_DIR/reality-xhttp.json.template"
+  else
+    template_file="$TEMPLATE_DIR/reality.json.template"
+  fi
 
   if [[ ! -f "$template_file" ]]; then
     err "Template not found: $template_file"
     exit 1
   fi
 
-  log "Rendering Xray config from template..."
+  log "Rendering Xray config from template: $(basename "$template_file")"
 
   rm -f "$XRAY_CONFIG"
 
@@ -153,7 +173,11 @@ generate_vless_link() {
     domain="icetea-shinchan.xyz"
   fi
 
-  VLESS_LINK="vless://${UUID}@${domain}:443?type=tcp&security=reality&encryption=none&flow=xtls-rprx-vision&fp=chrome&sni=www.cloudflare.com&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}#Reality-${domain}"
+  if [[ "$CONFIG_STYLE" == "xhttp" ]]; then
+    VLESS_LINK="vless://${UUID}@${domain}:8500?type=xhttp&encryption=none&path=%2Fxray&security=reality&sni=www.cloudflare.com&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}#Reality-XHTTP-${domain}"
+  else
+    VLESS_LINK="vless://${UUID}@${domain}:443?type=tcp&security=reality&encryption=none&flow=xtls-rprx-vision&fp=chrome&sni=www.cloudflare.com&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}#Reality-TCP-${domain}"
+  fi
   echo "$VLESS_LINK"
 }
 
@@ -231,7 +255,11 @@ main() {
   link="$(generate_vless_link)"
   generate_qr_code "$link"
 
-  log "Xray VLESS+XTLS-Vision+Reality on 443 is ready."
+  if [[ "$CONFIG_STYLE" == "xhttp" ]]; then
+    log "Xray VLESS+XHTTP+Reality on 8500 is ready. Nginx serves on 443."
+  else
+    log "Xray VLESS+XTLS-Vision+Reality on 443 is ready."
+  fi
 }
 
 # ------------- Argument parsing --------

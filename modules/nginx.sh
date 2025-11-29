@@ -138,6 +138,8 @@ obtain_or_renew_cert() {
 configure_quic_site() {
   local NGINX_SITE="/etc/nginx/sites-available/aria2_suite.conf"
   local QUIC_TPL="${SCRIPT_DIR}/config/nginx/quic.conf.template"
+  local INDEX_TPL="${SCRIPT_DIR}/config/nginx/index.html.template"
+  local INDEX_FILE="${WEBROOT}/index.html"
 
   log "Rendering final QUIC/HTTP3 nginx site for $DOMAIN..."
 
@@ -149,11 +151,14 @@ configure_quic_site() {
 
   ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/aria2_suite.conf
 
+  log "Generating default index.html from template..."
+  render_template "$INDEX_TPL" "$INDEX_FILE" DOMAIN
+
   log "Testing final nginx configuration..."
   nginx -t
   systemctl reload nginx
 
-  log "Nginx with TLS + HTTP/3/QUIC configured for $DOMAIN (listening on 0.0.0.0:8443)."
+  log "Nginx with TLS + HTTP/3/QUIC configured for $DOMAIN (listening on 0.0.0.0:443)."
 }
 
 main() {
