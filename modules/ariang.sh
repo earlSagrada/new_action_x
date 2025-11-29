@@ -144,6 +144,7 @@ install_ariang_component() {
         var s = (i.name||'')+' '+(i.id||'')+' '+(i.placeholder||'')+' '+(i.getAttribute('aria-label')||'');
         return /host|address|server|rpc-address|rpc-host/i.test(s);
       });
+      var applied = false;
       if(hostCandidates.length){
         // pick first candidate that isn't hidden
         var hi = hostCandidates.find(function(el){ return el.offsetParent !== null && el.type !== 'hidden'; }) || hostCandidates[0];
@@ -152,10 +153,12 @@ install_ariang_component() {
           // If the current value looks like it includes :6800, or is empty, overwrite.
           if(!hi.value || /:6800/.test(hi.value) || /127\.0\.0\.1:6800/.test(hi.value)) {
             setField(hi, host);
+            applied = true;
           } else {
             // If the value still contains a port anywhere, try to sanitize it.
             if(/:6800/.test(hi.value)) {
               setField(hi, (hi.value||'').replace(/:6800/g, ''));
+              applied = true;
             }
           }
         }
@@ -170,11 +173,12 @@ install_ariang_component() {
         if(pi){
           if(!pi.value || pi.value === '/' || !/jsonrpc/i.test(pi.value)){
             setField(pi, '/jsonrpc');
+            applied = true;
           } else if(/:6800/.test(pi.value)) {
             // strip stray :6800 that some malformed UIs store in path fields
             setField(pi, (pi.value||'').replace(/:6800/g, ''));
+            applied = true;
           }
-        }
         }
       }
 
@@ -190,6 +194,7 @@ install_ariang_component() {
             // Force-clear the port field and also override attribute/defaultValue
             if(pti.value === '6800' || pti.value) {
               setField(pti, '');
+              applied = true;
               pti.defaultValue = '';
               pti.setAttribute && pti.setAttribute('value', '');
             }
@@ -210,13 +215,14 @@ install_ariang_component() {
             proto.value = opt.value;
             proto.selectedIndex = oi;
             proto.dispatchEvent(new Event('change', { bubbles: true }));
+            applied = true;
             break;
           }
         }
       }
 
-      // If there are no visible inputs (UI not mounted yet), return false so caller can retry
-      return (hostCandidates.length || pathCandidates.length || portCandidates.length || proto);
+      // Return true only if we actually applied a change; otherwise caller should retry
+      return applied;
     } catch(e){
       return false;
     }
@@ -271,6 +277,17 @@ EOF
         awk 'BEGIN{added=0} /<\/body>/{ if(!added){ print "    <script src=\"/ariang/aria-defaults.js\"></script>"; added=1 } } {print}' "$index_html" > "$index_html.tmp" && mv "$index_html.tmp" "$index_html"
       fi
       log "Injected aria-defaults.js into index.html"
+      # Also add a very small inline sanitizer so the browser runs a simple localStorage/port-clean pass
+      # as early as possible (helps with some SPA load orders / caching).
+      if ! grep -q "aria-defaults-inline" "$index_html" 2>/dev/null; then
+        local tmpfile="$index_html.tmp2"
+        if grep -qi "<head" "$index_html"; then
+          awk 'BEGIN{added=0} /<\/head>/{ if(!added){ print "    <script id=\"aria-defaults-inline\">(function(){try{var h=location.hostname||''; for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i); if(!k) continue; try{ var v=localStorage.getItem(k); if(/(:6800|127\\.0\\.0\\.1:6800|localhost:6800)/.test(v) && !/token|secret|auth|password/i.test(k)){ localStorage.setItem(k, v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,'')); } }catch(e){} } }catch(e){} })();</script>"; added=1 } } {print}' "$index_html" > "$tmpfile" && mv "$tmpfile" "$index_html"
+        else
+          awk 'BEGIN{added=0} /<\/body>/{ if(!added){ print "    <script id=\"aria-defaults-inline\">(function(){try{var h=location.hostname||''; for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i); if(!k) continue; try{ var v=localStorage.getItem(k); if(/(:6800|127\\.0\\.0\\.1:6800|localhost:6800)/.test(v) && !/token|secret|auth|password/i.test(k)){ localStorage.setItem(k, v.replace(/127\\.0\\.0\\.1:6800/g,h).replace(/localhost:6800/g,h).replace(/:6800(?![0-9])/g,'')); } }catch(e){} } }catch(e){} })();</script>"; added=1 } } {print}' "$index_html" > "$tmpfile" && mv "$tmpfile" "$index_html"
+        fi
+        log "Injected inline aria-defaults sanitizer into index.html"
+      fi
     fi
   fi
 
