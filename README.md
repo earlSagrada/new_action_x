@@ -167,20 +167,21 @@ If AriaNg reports "disconnected" while aria2 is running and reachable locally, m
 
 If you put a host value like `icetea-shinchan.xyz:6800` or `127.0.0.1:6800`, AriaNg will sometimes attempt malformed URLs like `/jsonrpc:6800/jsonrpc` and Nginx will return 404. Our Nginx templates include a workaround, but the correct UI setting is to use the domain (or leave the port blank when using HTTPS) and the path `/jsonrpc`.
 
-### ✅ New: automatic safe defaults for AriaNg (fix for port 6800 showing)
+### ⚠️ AriaNg UI: manual configuration required
 
-We install a small helper `aria-defaults.js` into the AriaNg distribution that tries to ensure a first-run browser will use the same-origin host, clear any hard-coded `:6800` port entries, and set the path to `/jsonrpc` when appropriate.
+We no longer attempt to automatically patch the AriaNg UI during installation (automatic UI edits proved unreliable in some browsers). Instead, the installer prints a clear, post-install reminder so administrators can set the UI connection manually.
 
-How to verify after installation:
+How to set a correct connection in AriaNg:
 
-- Open a fully-clean browser (incognito) and navigate to `https://<your-domain>/ariang/`.
-- The Connection settings should show:
+- Open a fresh browser/Incognito and navigate to `https://<your-domain>/ariang/`.
+- In AriaNg connection settings set:
     - Host: `<your-domain>`
-    - Port: (blank)
+    - Port: (leave blank or set 443 when using HTTPS)
     - Secure/TLS: ON
     - Path: `/jsonrpc`
+    - Token: paste your one-time RPC secret printed during aria2 installation (we do not inject the secret into the UI).
 
-If you still see `6800` shown in the Port field, try a hard refresh (Ctrl+Shift+R) or clear site storage for the domain. If that doesn't help, please inspect `Network` in DevTools and confirm `aria-defaults.js` is being served from `/ariang/aria-defaults.js` and runs before AriaNg's main scripts.
+If AriaNg reports "disconnected", clear the site storage (DevTools → Application → Local Storage) or use a fresh browser session and verify the Connection settings are exactly as above.
 ```
 
 ---
