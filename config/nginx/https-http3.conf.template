@@ -42,7 +42,10 @@ server {
     # /jsonrpc:PORT/jsonrpc — rewrite these to the correct /jsonrpc path
     # so the backend aria2 receives a clean request.
     location ~ ^/jsonrpc:[0-9]+/jsonrpc$ {
-        proxy_pass http://127.0.0.1:6800/jsonrpc;
+        # Rewrite /jsonrpc:PORT/jsonrpc into /jsonrpc so backend receives
+        # the correct path. regex locations must not use proxy_pass with a URI.
+        rewrite ^/jsonrpc:[0-9]+/jsonrpc$ /jsonrpc break;
+        proxy_pass http://127.0.0.1:6800;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
