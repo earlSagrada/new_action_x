@@ -156,7 +156,7 @@ configure_quic_site() {
 
   log "Testing final nginx configuration..."
   nginx -t
-  systemctl reload nginx
+  systemctl restart nginx
 
   log "Nginx with TLS + HTTP/3/QUIC configured for $DOMAIN (listening on 0.0.0.0:443)."
 }
