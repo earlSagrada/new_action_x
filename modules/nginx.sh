@@ -116,6 +116,7 @@ obtain_or_renew_cert() {
   # We will request a certificate that covers both the main domain and file.<domain>
   local FILE_DOMAIN="file.${DOMAIN}"
 
+  local EXPAND_FLAG=""
   if [[ -f "$CERT_FULLCHAIN" ]]; then
     # If certificate is valid for >30 days AND contains the file subdomain, skip renew
     if openssl x509 -checkend $((30*24*3600)) -noout -in "$CERT_FULLCHAIN"; then
@@ -123,7 +124,17 @@ obtain_or_renew_cert() {
         log "Existing certificate for $DOMAIN includes ${FILE_DOMAIN} and is valid for >30 days. Skipping certbot."
         SKIP_CERTBOT=true
       else
-        log "Existing certificate valid but does not include ${FILE_DOMAIN}; requesting updated cert with both names."
+        # Cert is valid but doesn't include the file subdomain — we'll expand the existing certificate
+        log "Existing certificate valid but does not include ${FILE_DOMAIN}; will expand the certificate to include both names."
+        EXPAND_FLAG="--expand"
+      fi
+    else
+      # Cert exists but will expire — if it doesn't include the file subdomain we'll expand it
+      if openssl x509 -noout -text -in "$CERT_FULLCHAIN" | grep -q "DNS: ${FILE_DOMAIN}"; then
+        log "Existing certificate for $DOMAIN will expire soon but already contains ${FILE_DOMAIN}. Will renew as usual."
+      else
+        log "Existing certificate for $DOMAIN will expire soon and does not include ${FILE_DOMAIN}; will request a certificate including both names."
+        EXPAND_FLAG="--expand"
       fi
     fi
   fi
@@ -134,6 +145,7 @@ obtain_or_renew_cert() {
       --webroot -w "$WEBROOT" \
       -d "$DOMAIN" \
       -d "$FILE_DOMAIN" \
+      $EXPAND_FLAG \
       --email "$EMAIL" \
       --agree-tos --non-interactive \
       --rsa-key-size 4096 \
