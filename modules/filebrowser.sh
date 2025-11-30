@@ -66,18 +66,31 @@ install_filebrowser_component() {
     tmpfile=$(mktemp /tmp/filebrowser-journal.XXXXXX) || tmpfile=/tmp/filebrowser-journal
     journalctl -u filebrowser -n 200 --no-pager > "$tmpfile" 2>/dev/null || true
     # Match lines likely containing the generated password
-    fb_pw_snippet=$(grep -Ei "(random.*password|randomly generated password|generated password|initial password|password for the user|admin.*password|credentials)" "$tmpfile" || true)
+    fb_pw_matches=$(grep -Ei "(random.*password|randomly generated password|generated password|initial password|password for the user|User .* initialized with .*password|credentials)" "$tmpfile" || true)
     # If nothing matched, also check generic 'password' mentions
-    if [[ -z "$fb_pw_snippet" ]]; then
-      fb_pw_snippet=$(grep -Ei "password" "$tmpfile" || true)
+    if [[ -z "$fb_pw_matches" ]]; then
+      fb_pw_matches=$(grep -Ei "password" "$tmpfile" || true)
+    fi
+    # Keep only the last matching line (we want the most recent generated password)
+    if [[ -n "$fb_pw_matches" ]]; then
+      last_line=$(printf "%s\n" "$fb_pw_matches" | tail -n1)
+      # Try to extract the password token from the last line (handles 'password: <pw>' and 'password=<pw>' patterns)
+      pw=$(printf "%s" "$last_line" | sed -n -E 's/.*[Pp]assword[:=] *([^[:space:]]+).*/\1/p' | tail -n1 || true)
+      # If extraction failed, fall back to the raw last_line (trimmed)
+      if [[ -n "$pw" ]]; then
+        fb_pw_snippet="password: $pw"
+      else
+        fb_pw_snippet="${last_line}"
+      fi
+    else
+      fb_pw_snippet=""
     fi
     # Clean up temp file
     rm -f "$tmpfile" || true
   fi
 
   if [[ -n "${fb_pw_snippet:-}" ]]; then
-    # Trim to first 3 matching lines for concise display
-    fb_pw_snippet=$(printf "%s" "$fb_pw_snippet" | sed -n '1,3p')
+    # At this point fb_pw_snippet contains a single, cleaned line
     log "FileBrowser running at http://127.0.0.1:8080 (admin user created; password captured in logs)."
   else
     log "FileBrowser running at http://127.0.0.1:8080 (default admin/admin)."
