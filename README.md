@@ -119,10 +119,9 @@ sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
 ### **4. filebrowser.sh**
 - Installs Filebrowser binary
 - Runs on **port 8080** (internally) and exposed via Nginx proxy
-- Provides file manager access to downloads directory
-- Provides file manager access to the downloads directory (configured as `/var/www/<domain>/downloads` by default)
-    - Aria2/AriaNg downloads are configured to save into the same directory, so new downloads will appear in FileBrowser automatically.
-- Default credentials: admin/admin (change recommended)
+ - Provides file manager access to the downloads directory (configured as `/var/www/<domain>/downloads` by default)
+     - Aria2/AriaNg downloads are configured to save into the same directory by default, so new downloads will appear in FileBrowser automatically.
+ - Initial login: on first boot FileBrowser will often bootstrap the database and print a randomly-generated admin password to the service log. The installer captures that password (if generated) and prints it in the post-install output for convenience. If no generated password is present, the installer falls back to the traditional `admin / admin` hint; always change the admin password immediately after first login.
 
 #### First-time login (Filebrowser)
 
@@ -133,6 +132,7 @@ Key points:
 - Default credentials: `admin` / `admin` (change immediately after the first login).
 - To change password use the Web UI: Settings → Users → Edit the admin user, or create a new administrator account and remove the default.
 - The installer will show the public URL when DNS for `file.<your-domain>` is available and certs are issued.
+    - The installer will request/renew a TLS certificate that includes both your main domain and `file.<your-domain>` and will automatically expand an existing cert if needed (uses certbot --expand). The repo uses a dedicated `file.<your-domain>` host for FileBrowser rather than a `/filebrowser/` path to avoid path/prefix issues.
 
 ### **5. fail2ban.sh**
 - Installs Fail2ban with strict jails for security
