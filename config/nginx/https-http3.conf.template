@@ -17,7 +17,7 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     # prefer use of http2 directive instead of listen ... http2
-    http2;
+    http2 on;
 
     # HTTP/3 QUIC
     listen 443 quic reuseport;
@@ -84,7 +84,7 @@ server {
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
-    http2;
+    http2 on;
 
     listen 443 quic reuseport;
     listen [::]:443 quic reuseport;

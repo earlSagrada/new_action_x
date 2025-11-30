@@ -10,7 +10,7 @@ server {
     listen 0.0.0.0:443 ssl;
     listen 0.0.0.0:443 quic;
     # use http2 directive instead of deprecated listen ... http2
-    http2;
+    http2 on;
     server_name {{DOMAIN}};
 
     ssl_certificate {{CERT_FULLCHAIN}};
@@ -92,7 +92,7 @@ server {
 
     listen 443 quic reuseport;
     listen [::]:443 quic reuseport;
-    http2;
+    http2 on;
 
     server_name file.{{DOMAIN}};
 
