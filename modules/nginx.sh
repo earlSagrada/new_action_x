@@ -168,9 +168,16 @@ configure_quic_site() {
 
   # Ensure variables are exported so render_template can see them
   export DOMAIN WEBROOT CERT_FULLCHAIN CERT_PRIVKEY
+  export FILE_SUBDOMAIN="file.${DOMAIN}"
 
   render_template "$QUIC_TPL" "$NGINX_SITE" \
-    DOMAIN WEBROOT CERT_FULLCHAIN CERT_PRIVKEY
+    DOMAIN WEBROOT CERT_FULLCHAIN CERT_PRIVKEY FILE_SUBDOMAIN
+
+  # Sanity check: ensure no unsubstituted template tokens remain in the generated file
+  if grep -q "{{" "$NGINX_SITE"; then
+    err "Rendered nginx site contains unsubstituted template tokens ({{...}}). Aborting to avoid writing invalid nginx config: $NGINX_SITE"
+    exit 1
+  fi
 
   ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/aria2_suite.conf
 
