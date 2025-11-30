@@ -1,6 +1,6 @@
 server {
     listen 80;
-    server_name {{DOMAIN}};
+    server_name {{DOMAIN}} {{FILE_SUBDOMAIN}};
 
     root {{WEBROOT}};
     index index.html index.htm;

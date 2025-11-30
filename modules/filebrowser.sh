@@ -53,6 +53,57 @@ install_filebrowser_component() {
   fi
 
   log "FileBrowser running at http://127.0.0.1:8080 (default admin/admin)."
+
+  # Informational post-install instructions for first-time login
+  if [[ -n "${DOMAIN:-}" ]]; then
+    cat <<MSG
+
+=============================================================
+FileBrowser is installed and running.
+
+Web UI (local):  http://127.0.0.1:8080/
+Web UI (public): https://file.${DOMAIN}/  (after nginx + certs finished)
+
+Default credentials:
+  username: admin
+  password: admin
+
+IMPORTANT: Please change the default password immediately after your first login.
+You can change it from the FileBrowser web UI (Settings → Users → Edit the admin user),
+or create a new user and remove the default admin account.
+
+Config + DB locations:
+  - Config: /etc/filebrowser/filebrowser.json
+  - Database: /var/lib/filebrowser/filebrowser.db
+
+To check service status on the server:
+  systemctl status filebrowser
+  journalctl -u filebrowser -n 50 --no-pager
+
+Once DNS (file.${DOMAIN}) has propagated and certbot finishes, visit the public URL
+above in a private/incognito browser to sign in for the first time.
+
+DO NOT leave the default admin/admin credentials in production.
+=============================================================
+
+MSG
+  else
+    cat <<MSG
+
+=============================================================
+FileBrowser is installed and running at http://127.0.0.1:8080/
+
+Default credentials: admin / admin
+
+Please change the default password immediately after first login via the UI
+(Settings → Users → Edit admin) or create a new admin account and delete the default.
+
+Config + DB locations: /etc/filebrowser/filebrowser.json, /var/lib/filebrowser/filebrowser.db
+
+To check service status: systemctl status filebrowser
+
+MSG
+  fi
 }
 
 install_filebrowser_component "$@"

@@ -122,6 +122,16 @@ sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
 - Provides file manager access to downloads directory
 - Default credentials: admin/admin (change recommended)
 
+#### First-time login (Filebrowser)
+
+When the `filebrowser` module is installed the installer will print post-install instructions showing the local and public URL (if you passed `--domain`), plus the default credentials and where the configuration / DB are located.
+
+Key points:
+- FileBrowser is served internally on port 8080 and — in this project — exposed via the `file.<your-domain>` subdomain.
+- Default credentials: `admin` / `admin` (change immediately after the first login).
+- To change password use the Web UI: Settings → Users → Edit the admin user, or create a new administrator account and remove the default.
+- The installer will show the public URL when DNS for `file.<your-domain>` is available and certs are issued.
+
 ### **5. fail2ban.sh**
 - Installs Fail2ban with strict jails for security
 - **Xray Reality jail**: monitors Xray errors via systemd logs

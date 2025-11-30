@@ -90,8 +90,11 @@ setup_http_only_site() {
   mkdir -p "$WEBROOT"
 
   log "Configuring temporary HTTP-only nginx site for ACME challenge..."
+  # Render http-only template with DOMAIN + WEBROOT (and include file subdomain)
+  # Export FILE_SUBDOMAIN so templates can include file.DOMAIN when needed
+  export FILE_SUBDOMAIN="file.${DOMAIN}"
   # Render http-only template with DOMAIN + WEBROOT
-  render_template "$HTTP_TPL" "$NGINX_SITE" DOMAIN WEBROOT
+  render_template "$HTTP_TPL" "$NGINX_SITE" DOMAIN WEBROOT FILE_SUBDOMAIN
 
   ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/aria2_suite.conf
   if [[ -e /etc/nginx/sites-enabled/default ]]; then
@@ -110,19 +113,27 @@ obtain_or_renew_cert() {
   CERT_PRIVKEY="${CERT_DIR}/privkey.pem"
 
   local SKIP_CERTBOT=false
+  # We will request a certificate that covers both the main domain and file.<domain>
+  local FILE_DOMAIN="file.${DOMAIN}"
 
   if [[ -f "$CERT_FULLCHAIN" ]]; then
+    # If certificate is valid for >30 days AND contains the file subdomain, skip renew
     if openssl x509 -checkend $((30*24*3600)) -noout -in "$CERT_FULLCHAIN"; then
-      log "Existing certificate for $DOMAIN is valid for >30 days. Skipping certbot."
-      SKIP_CERTBOT=true
+      if openssl x509 -noout -text -in "$CERT_FULLCHAIN" | grep -q "DNS: ${FILE_DOMAIN}"; then
+        log "Existing certificate for $DOMAIN includes ${FILE_DOMAIN} and is valid for >30 days. Skipping certbot."
+        SKIP_CERTBOT=true
+      else
+        log "Existing certificate valid but does not include ${FILE_DOMAIN}; requesting updated cert with both names."
+      fi
     fi
   fi
 
   if [[ "$SKIP_CERTBOT" != true ]]; then
-    log "Requesting/renewing Let's Encrypt certificate for $DOMAIN ..."
+    log "Requesting/renewing Let's Encrypt certificate for $DOMAIN and file.$DOMAIN ..."
     certbot certonly \
       --webroot -w "$WEBROOT" \
       -d "$DOMAIN" \
+      -d "$FILE_DOMAIN" \
       --email "$EMAIL" \
       --agree-tos --non-interactive \
       --rsa-key-size 4096 \
@@ -159,6 +170,15 @@ configure_quic_site() {
   systemctl restart nginx
 
   log "Nginx with TLS + HTTP/3/QUIC configured for $DOMAIN (listening on 0.0.0.0:443)."
+
+  # Check whether FileBrowser service is reachable locally — helpful information
+  if command -v curl >/dev/null 2>&1; then
+    if curl -s --max-time 5 http://127.0.0.1:8080/ >/dev/null 2>&1; then
+      log "FileBrowser appears reachable on 127.0.0.1:8080 — it will be proxied at https://file.${DOMAIN}/"
+    else
+      log "FileBrowser is not responding on 127.0.0.1:8080: nginx will still be configured for https://file.${DOMAIN}/ — make sure filebrowser service is running."
+    fi
+  fi
 }
 
 main() {
