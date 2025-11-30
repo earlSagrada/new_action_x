@@ -7,8 +7,10 @@ server {
 
 # HTTPS + HTTP/3 (QUIC)
 server {
-    listen 0.0.0.0:443 ssl http2;
+    listen 0.0.0.0:443 ssl;
     listen 0.0.0.0:443 quic;
+    # use http2 directive instead of deprecated listen ... http2
+    http2;
     server_name {{DOMAIN}};
 
     ssl_certificate {{CERT_FULLCHAIN}};
@@ -85,11 +87,12 @@ server {
 
 # HTTPS (HTTP/2 + HTTP/3) for file.{{DOMAIN}}
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
 
     listen 443 quic reuseport;
     listen [::]:443 quic reuseport;
+    http2;
 
     server_name file.{{DOMAIN}};
 
@@ -98,7 +101,7 @@ server {
     ssl_protocols TLSv1.3;
 
     add_header Alt-Svc 'h3=":443"; ma=86400' always;
-    add_header QUIC-Status $quic always;
+    add_header QUIC-Status "enabled" always;
 
     location / {
         proxy_pass http://127.0.0.1:8080;

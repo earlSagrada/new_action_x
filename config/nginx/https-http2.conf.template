@@ -14,8 +14,9 @@ server {
 
 # HTTPS for AriaNg + JSON-RPC (HTTP/2)
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2;
     server_name {{DOMAIN}};
 
     root {{WEBROOT}};
@@ -40,8 +41,9 @@ server {
 
 # HTTPS for FileBrowser (HTTP/2)
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2;
     server_name file.{{DOMAIN}};
 
     ssl_certificate     {{CERT_PATH}};
