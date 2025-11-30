@@ -9,7 +9,7 @@ source "$SCRIPT_DIR/modules/common.sh"
 ARIA2_CONF_DIR="${ARIA2_CONF_DIR:-/etc/aria2}"
 ARIA2_CONF="${ARIA2_CONF:-${ARIA2_CONF_DIR}/aria2.conf}"
 ARIA2_SESSION="${ARIA2_SESSION:-${ARIA2_CONF_DIR}/aria2.session}"
-ARIA2_DOWNLOAD_DIR="${ARIA2_DOWNLOAD_DIR:-/var/www/${DOMAIN:-example.com}/downloads}"
+ARIA2_DOWNLOAD_DIR="${ARIA2_DOWNLOAD_DIR:-${DOWNLOAD_DIR:-/var/www/${DOMAIN:-example.com}/downloads}}"
 
 ARIA2_USER="${ARIA2_USER:-www-data}"
 ARIA2_GROUP="${ARIA2_GROUP:-www-data}"
@@ -75,6 +75,8 @@ DO NOT share the secret publicly.
 =============================================================
 
 MSG
+
+  log "Aria2 downloads directory: ${ARIA2_DOWNLOAD_DIR}"
 }
 
 install_aria2_component "$@"

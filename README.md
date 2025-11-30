@@ -113,13 +113,15 @@ sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
 - Installs Aria2 daemon with RPC interface on **port 6800**
     - Installer prints the rpc-secret to the console during installation so you can copy it (the secret may change on each run).
 - Deploys AriaNg UI (static web UI) via Nginx proxy
-- Downloads stored in `/var/www/{DOMAIN}/downloads/`
+ - Downloads stored in `/var/www/{DOMAIN}/downloads/` (Aria2 is configured to save downloads here by default so FileBrowser will expose them)
 - Uses RPC secret for authentication
 
 ### **4. filebrowser.sh**
 - Installs Filebrowser binary
 - Runs on **port 8080** (internally) and exposed via Nginx proxy
 - Provides file manager access to downloads directory
+- Provides file manager access to the downloads directory (configured as `/var/www/<domain>/downloads` by default)
+    - Aria2/AriaNg downloads are configured to save into the same directory, so new downloads will appear in FileBrowser automatically.
 - Default credentials: admin/admin (change recommended)
 
 #### First-time login (Filebrowser)

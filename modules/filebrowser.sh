@@ -19,6 +19,10 @@ DOWNLOAD_DIR="${DOWNLOAD_DIR:-/var/www/${DOMAIN:-example.com}/downloads}"
 mkdir -p "$FILEBROWSER_CONF_DIR" "$FILEBROWSER_DB_DIR" /var/log
 touch "$FILEBROWSER_LOG"
 
+# Ensure downloads dir exists so FileBrowser can browse it (and to match aria2)
+mkdir -p "$DOWNLOAD_DIR"
+chown -R www-data:www-data "$DOWNLOAD_DIR"
+
 chown -R www-data:www-data "$FILEBROWSER_DB_DIR"
 
 install_filebrowser_component() {
@@ -52,7 +56,32 @@ install_filebrowser_component() {
     exit 1
   fi
 
-  log "FileBrowser running at http://127.0.0.1:8080 (default admin/admin)."
+  # Attempt to capture any first-run password output from FileBrowser logs.
+  # FileBrowser prints the randomly generated password during first boot in the service logs.
+  local fb_pw_snippet=""
+  if command -v journalctl >/dev/null 2>&1; then
+    # give service a moment to write logs then grab the latest 200 lines
+    sleep 1
+    local tmpfile
+    tmpfile=$(mktemp /tmp/filebrowser-journal.XXXXXX) || tmpfile=/tmp/filebrowser-journal
+    journalctl -u filebrowser -n 200 --no-pager > "$tmpfile" 2>/dev/null || true
+    # Match lines likely containing the generated password
+    fb_pw_snippet=$(grep -Ei "(random.*password|randomly generated password|generated password|initial password|password for the user|admin.*password|credentials)" "$tmpfile" || true)
+    # If nothing matched, also check generic 'password' mentions
+    if [[ -z "$fb_pw_snippet" ]]; then
+      fb_pw_snippet=$(grep -Ei "password" "$tmpfile" || true)
+    fi
+    # Clean up temp file
+    rm -f "$tmpfile" || true
+  fi
+
+  if [[ -n "${fb_pw_snippet:-}" ]]; then
+    # Trim to first 3 matching lines for concise display
+    fb_pw_snippet=$(printf "%s" "$fb_pw_snippet" | sed -n '1,3p')
+    log "FileBrowser running at http://127.0.0.1:8080 (admin user created; password captured in logs)."
+  else
+    log "FileBrowser running at http://127.0.0.1:8080 (default admin/admin)."
+  fi
 
   # Informational post-install instructions for first-time login
   if [[ -n "${DOMAIN:-}" ]]; then
@@ -64,9 +93,7 @@ FileBrowser is installed and running.
 Web UI (local):  http://127.0.0.1:8080/
 Web UI (public): https://file.${DOMAIN}/  (after nginx + certs finished)
 
-Default credentials:
-  username: admin
-  password: admin
+$(if [[ -n "${fb_pw_snippet:-}" ]]; then printf "Initial credentials detected from logs:\n  username: admin\n  %s\n\n" "$fb_pw_snippet"; else printf "Default credentials:\n  username: admin\n  password: admin\n\n"; fi)
 
 IMPORTANT: Please change the default password immediately after your first login.
 You can change it from the FileBrowser web UI (Settings → Users → Edit the admin user),
@@ -93,7 +120,7 @@ MSG
 =============================================================
 FileBrowser is installed and running at http://127.0.0.1:8080/
 
-Default credentials: admin / admin
+$(if [[ -n "${fb_pw_snippet:-}" ]]; then printf "Initial credentials detected from logs:\n  username: admin\n  %s\n\n" "$fb_pw_snippet"; else printf "Default credentials: admin / admin\n\n"; fi)
 
 Please change the default password immediately after first login via the UI
 (Settings → Users → Edit admin) or create a new admin account and delete the default.

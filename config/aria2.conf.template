@@ -1,5 +1,5 @@
 ## Basic
-dir={{DOWNLOAD_DIR}}
+dir={{ARIA2_DOWNLOAD_DIR}}
 file-allocation=trunc
 continue=true
 
