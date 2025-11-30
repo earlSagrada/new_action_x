@@ -15,7 +15,19 @@ ARIA2_USER="${ARIA2_USER:-www-data}"
 ARIA2_GROUP="${ARIA2_GROUP:-www-data}"
 ARIA2_SERVICE_PATH="${ARIA2_SERVICE_PATH:-/etc/systemd/system/aria2.service}"
 
-RPC_SECRET="${RPC_SECRET:-$(openssl rand -hex 16)}"
+if [[ -z "${RPC_SECRET:-}" ]]; then
+  # If an existing aria2.conf already has rpc-secret, reuse it so updates keep the same secret.
+  if [[ -f "$ARIA2_CONF" ]]; then
+    existing=$(grep -E '^rpc-secret=' "$ARIA2_CONF" | sed 's/^rpc-secret=//' | head -n1 || true)
+    if [[ -n "$existing" ]]; then
+      RPC_SECRET="$existing"
+    else
+      RPC_SECRET="$(openssl rand -hex 16)"
+    fi
+  else
+    RPC_SECRET="$(openssl rand -hex 16)"
+  fi
+fi
 
 mkdir -p "$ARIA2_CONF_DIR" "$ARIA2_DOWNLOAD_DIR" /var/log/aria2 /var/lib/aria2
 touch "$ARIA2_SESSION" /var/log/aria2/aria2.log

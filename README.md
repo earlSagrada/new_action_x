@@ -267,8 +267,9 @@ sudo ./install.sh --update --domain example.com --email admin@example.com
 ### Update Options
 
 **`--update` (default update mode):**
-- Updates nginx, aria2, ariang, filebrowser, fail2ban
-- Preserves existing Xray keys (UUID, private/public keys, short ID)
+ - Updates nginx, aria2, ariang, filebrowser, fail2ban
+ - Preserves existing Xray keys (UUID, private/public keys, short ID)
+ - Preserves Aria2 RPC secret and FileBrowser database/credentials (so updates won't rotate RPC tokens or reset the FileBrowser admin account)
 - Regenerates Xray QR code only via `xray.sh --regen`
 - Restarts all services
 
