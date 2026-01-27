@@ -16,16 +16,22 @@ Your project contains:
 ```
 NEW_ACTION_X/
 ├── install.sh                 # Main installer entrypoint
+├── bin/
+│   └── xray-check.sh          # Xray health check script
 ├── modules/
 │   ├── aria2.sh               # Installs Aria2 RPC + systemd
 │   ├── ariang.sh              # Deploys AriaNg static UI
+│   ├── common.sh              # Shared utility functions
 │   ├── fail2ban.sh            # Fail2ban rules + jails
 │   ├── filebrowser.sh         # Filebrowser server + config
 │   ├── nginx.sh               # Nginx + QUIC/HTTP3 configs
 │   └── xray.sh                # Xray core + VLESS-Reality inbound
 └── config/
-    ├── nginx/
-    ├── systemd/
+    ├── nginx/                 # Nginx configuration templates
+    ├── systemd/               # Systemd service files
+    ├── xray/
+    │   ├── reality-xhttp.json.template    # XHTTP mode config (default)
+    │   └── reality.json.template          # TCP mode config (legacy)
     ├── aria2.conf.template
     └── filebrowser.json.template
 ```
@@ -34,7 +40,7 @@ Everything is designed to set up a fully working VPS with:
 - HTTP/3 & QUIC support
 - Aria2 RPC + AriaNg UI
 - Filebrowser file manager
-- Xray VLESS-Reality on UDP/443
+- Xray VLESS-Reality with XHTTP transport on port 8500 (default) or TCP/XTLS-Vision on port 443 (legacy mode)
 - Fail2ban IP banning
 - Auto-generated client configs and QR codes
 
@@ -95,19 +101,23 @@ sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
 ---
 
 ## ⚙️ How the Modules Work
-### **1. xray.sh** (VLESS + Reality on TCP/443)
+### **1. xray.sh** (VLESS + Reality - XHTTP or TCP mode)
 - Installs Xray-core
 - Generates private key, public key, UUID, and short ID
-- Creates VLESS-Reality inbound on **TCP/443** with fallback to port **8443** (Nginx)
+- Supports two configuration styles:
+  - **XHTTP mode (default)**: VLESS-Reality on **port 8500** (TCP/UDP) with XHTTP transport
+  - **TCP mode (legacy)**: VLESS-Reality on **TCP/443** with XTLS-Vision flow and fallback to port **8443** (Nginx)
+- Configuration style is controlled via `CONFIG_STYLE` environment variable (`xhttp` or `tcp`)
 - Generates VLESS connection link + QR code stored under `output/xray_reality_qr.png`
 - Writes systemd service (`/etc/systemd/system/xray.service`)
 
 ### **2. nginx.sh** (QUIC/HTTP/2 with TLS 1.3)
 - Installs latest Nginx with HTTP/2 and QUIC support
 - Obtains Let's Encrypt certificate via certbot
-- Configures **listening on 0.0.0.0:8443** (HTTP/2 + QUIC on all interfaces)
-- Redirects HTTP (80) to HTTPS (443)
-- Serves as fallback for Xray Reality (receives non-VLESS traffic on port 443)
+- In **XHTTP mode** (default): Nginx listens on **port 443** (HTTP/2 + QUIC) as the main web server
+- In **TCP mode** (legacy): Nginx listens on **port 8443** and serves as fallback for Xray Reality (receives non-VLESS traffic from port 443)
+- Redirects HTTP (80) to HTTPS
+- Proxies AriaNg and Filebrowser subdomains
 
 ### **3. aria2.sh + ariang.sh**
 - Installs Aria2 daemon with RPC interface on **port 6800**
@@ -201,14 +211,33 @@ If AriaNg reports "disconnected", clear the site storage (DevTools → Applicati
 ## 🔧 Configuration Locations
 | Component | Config Path | Listen |
 |----------|-------------|--------|
-| Xray inbound | `/etc/xray/config.json` | TCP 443 (with fallback to 8443) |
+| Xray inbound | `/etc/xray/config.json` | TCP/UDP 8500 (XHTTP mode, default) or TCP 443 (TCP mode with fallback to 8443) |
 | Xray logs | `/var/log/xray/` | — |
 | Xray QR code | `output/xray_reality_qr.png` | — |
 | Aria2 daemon | `/etc/aria2/aria2.conf` | TCP 6800 (RPC) |
 | AriaNg UI | `/usr/share/ariang/` | Proxied via Nginx |
 | Filebrowser | `/etc/filebrowser/filebrowser.json` | TCP 8080 (proxied via Nginx) |
-| Nginx QUIC configs | `/etc/nginx/conf.d/` or `/etc/nginx/sites-available/` | TCP/UDP 8443 (all interfaces) |
+| Nginx QUIC configs | `/etc/nginx/conf.d/` or `/etc/nginx/sites-available/` | TCP/UDP 443 (XHTTP mode) or TCP/UDP 8443 (TCP mode) |
 | Fail2ban jails | `/etc/fail2ban/jail.d/` | — |
+
+---
+
+## 🪠 Switching Between XHTTP and TCP Modes
+
+By default, Xray uses **XHTTP mode** (port 8500). To use the legacy TCP mode (port 443 with XTLS-Vision):
+
+```bash
+export CONFIG_STYLE=tcp
+sudo bash modules/xray.sh
+```
+
+To switch back to XHTTP mode:
+```bash
+export CONFIG_STYLE=xhttp
+sudo bash modules/xray.sh
+```
+
+**Note:** After switching modes, you'll need to update your client configuration with the new connection details and port.
 
 ---
 
@@ -302,4 +331,4 @@ If something breaks during install, check:
 ---
 
 ## Licence
-MIT License (feel free to adjust).
+MIT License
