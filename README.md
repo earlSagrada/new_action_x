@@ -190,7 +190,7 @@ nginx -t
 If AriaNg reports "disconnected" while aria2 is running and reachable locally, make sure the UI connection uses your public domain + path /jsonrpc (NOT 127.0.0.1:6800). Example AriaNg settings:
 
 - Host: icetea-shinchan.xyz
-- Port: (leave blank or 443)
+- Port: **443**
 - Secure/TLS: ON
 - Path: /jsonrpc
 - Token: <your rpc-secret value>
@@ -206,7 +206,7 @@ How to set a correct connection in AriaNg:
 - Open a fresh browser/Incognito and navigate to `https://<your-domain>/ariang/`.
 - In AriaNg connection settings set:
     - Host: `<your-domain>`
-    - Port: (leave blank or set 443 when using HTTPS)
+    - Port: **443**
     - Secure/TLS: ON
     - Path: `/jsonrpc`
     - Token: paste your RPC secret printed during aria2 installation (we do not inject the secret into the UI).
