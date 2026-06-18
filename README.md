@@ -93,6 +93,12 @@ sudo ./install.sh --update-no-xray --domain example.com --email admin@example.co
 ```
 
 
+**Show your Aria2 RPC secret token (if you forgot it):**
+```bash
+sudo ./install.sh --show-rpc-token
+```
+
+
 **Debug mode:**
 ```bash
 sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
@@ -121,7 +127,9 @@ sudo bash -x ./install.sh --full --domain example.com --email admin@example.com
 
 ### **3. aria2.sh + ariang.sh**
 - Installs Aria2 daemon with RPC interface on **port 6800**
-    - Installer prints the rpc-secret to the console during installation so you can copy it (the secret may change on each run).
+    - Installer prints the rpc-secret to the console during installation so you can copy it.
+    - The secret is **preserved across `--update` runs** so it never rotates unexpectedly.
+    - If you forget the token later, run `sudo ./install.sh --show-rpc-token` (or choose option **4** from the interactive menu) to print it at any time.
 - Deploys AriaNg UI (static web UI) via Nginx proxy
  - Downloads stored in `/var/www/{DOMAIN}/downloads/` (Aria2 is configured to save downloads here by default so FileBrowser will expose them)
 - Uses RPC secret for authentication
@@ -252,6 +260,8 @@ This will:
 - Generate a fresh QR code
 - **Does NOT** restart Xray or change any keys
 
+> **Note**: if the saved public key file (`config/xray_public_key`) is missing, `--regen` will automatically derive the public key from the stored private key and save it for future use — no manual intervention needed.
+
 ### Regenerate all keys (new UUID, keys, short ID):
 ```bash
 sudo bash modules/xray.sh --regen-keys
@@ -286,12 +296,18 @@ fail2ban-client status sshd
 ---
 
 ## 🔄 Updating the Scripts
-To pull new updates:
+
+### Where to run these commands
+- **Development machine**: edit files, commit, then `git push origin main`.
+- **VPS** (at `/opt/new_action_x`): pull the latest code and re-apply config:
 
 ```bash
+cd /opt/new_action_x
 git pull origin main
 sudo ./install.sh --update --domain example.com --email admin@example.com
 ```
+
+> **Tip**: re-running `install.sh --update` also works without an explicit `git pull` — the bootstrap stage automatically does `git fetch && git reset --hard origin/main` whenever the installer is executed from outside `/opt/new_action_x`.
 
 ### Update Options
 
