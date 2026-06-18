@@ -136,18 +136,42 @@ Usage:
   sudo ./install.sh --xray   [--domain example.com --email admin@example.com]
   sudo ./install.sh --update [--domain example.com --email admin@example.com]
   sudo ./install.sh --update-no-xray [--domain example.com --email admin@example.com]
+  sudo ./install.sh --show-rpc-token
 
 Options:
   --full             Full install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray with new keys)
   --xray             Xray-only (VLESS + Reality with new keys)
   --update           Update all components (keeps existing Xray keys, regenerates QR code only)
   --update-no-xray   Update all components EXCEPT Xray
+  --show-rpc-token   Print the current Aria2 RPC secret token
   --domain           Primary domain name (used for nginx, certbot, etc.)
   --email            Email for Let's Encrypt registration
   -h, --help         Show this help
 
 If --domain / --email are omitted, you will be prompted interactively.
 EOF
+}
+
+# Show the current Aria2 RPC secret token
+show_rpc_token() {
+  local conf="/etc/aria2/aria2.conf"
+  if [[ ! -f "$conf" ]]; then
+    cecho red "[!] aria2.conf not found at: $conf"
+    cecho yellow "[*] aria2 may not be installed yet."
+    exit 1
+  fi
+  local token
+  token="$(grep -E '^rpc-secret=' "$conf" | sed 's/^rpc-secret=//' | head -n1)"
+  if [[ -z "$token" ]]; then
+    cecho red "[!] No rpc-secret entry found in $conf"
+    exit 1
+  fi
+  echo
+  echo "============================================="
+  cecho green "  Aria2 RPC Secret Token:"
+  echo "  $token"
+  echo "============================================="
+  echo
 }
 
 # Install health-check tools
@@ -175,6 +199,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --update-no-xray)
       MODE="update-no-xray"
+      shift
+      ;;
+    --show-rpc-token)
+      MODE="show-rpc-token"
       shift
       ;;
     --domain)
@@ -292,15 +320,17 @@ interactive_menu() {
   echo "  1) Full install (nginx + aria2 + AriaNg + filebrowser + fail2ban + xray)"
   echo "  2) Xray-only (VLESS + Reality)"
   echo "  3) Update existing installation"
-  echo "  4) Exit"
+  echo "  4) Show Aria2 RPC token"
+  echo "  5) Exit"
   echo
-  read -rp "Enter choice [1-4]: " choice
+  read -rp "Enter choice [1-5]: " choice
 
   case "$choice" in
     1) full_install ;;
     2) xray_only_install ;;
     3) update_all ;;
-    4) cecho yellow "[*] Exit requested. Nothing done."; exit 0 ;;
+    4) show_rpc_token ;;
+    5) cecho yellow "[*] Exit requested. Nothing done."; exit 0 ;;
     *) cecho red "[!] Invalid choice."; exit 1 ;;
   esac
 }
@@ -311,5 +341,6 @@ case "$MODE" in
   xray)            xray_only_install ;;
   update)          update_all ;;
   update-no-xray)  update_no_xray ;;
+  show-rpc-token)  show_rpc_token ;;
   *)               interactive_menu ;;
 esac

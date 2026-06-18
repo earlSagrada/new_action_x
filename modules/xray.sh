@@ -132,19 +132,32 @@ load_existing_keys() {
 
   UUID="$(grep -o '"id": "[^"]*"' "$XRAY_CONFIG" | head -n1 | cut -d'"' -f4)"
   PRIVATE_KEY="$(grep -o '"privateKey": "[^"]*"' "$XRAY_CONFIG" | head -n1 | cut -d'"' -f4)"
-  SHORT_ID="$(grep -o '"shortIds": \[.*\]' "$XRAY_CONFIG" | grep -o '"[^"]*"' | head -n1 | tr -d '"')"
+  # shortIds array is multi-line in JSON; grab the value from the line(s) following the key
+  SHORT_ID="$(grep -A2 '"shortIds"' "$XRAY_CONFIG" | grep -oE '"[0-9a-fA-F]+"' | head -n1 | tr -d '"')"
 
   if [[ -f "$SCRIPT_ROOT/config/xray_public_key" ]]; then
     PUBLIC_KEY="$(cat "$SCRIPT_ROOT/config/xray_public_key")"
+  elif [[ -n "${PRIVATE_KEY:-}" ]] && command -v "$XRAY_BIN" >/dev/null 2>&1; then
+    log "Public key file not found — deriving from private key..."
+    PUBLIC_KEY="$("$XRAY_BIN" x25519 -i "$PRIVATE_KEY" 2>/dev/null | grep -i 'Password' | awk -F': *' '{print $2}')"
+    if [[ -n "$PUBLIC_KEY" ]]; then
+      save_public_key
+      log "Public key derived and saved for future use."
+    else
+      err "Failed to derive public key from private key."
+      return 1
+    fi
   else
-    err "Public key file not found. Cannot regenerate QR code."
+    err "Public key file not found: $SCRIPT_ROOT/config/xray_public_key"
     return 1
   fi
 
-  if [[ -z "$UUID" || -z "$PRIVATE_KEY" || -z "$SHORT_ID" || -z "$PUBLIC_KEY" ]]; then
-    err "Failed to load all keys from config."
-    return 1
-  fi
+  local failed=0
+  [[ -z "$UUID"        ]] && { err "Failed to read UUID from config.";       failed=1; }
+  [[ -z "$PRIVATE_KEY" ]] && { err "Failed to read PrivateKey from config."; failed=1; }
+  [[ -z "$SHORT_ID"    ]] && { err "Failed to read ShortId from config.";    failed=1; }
+  [[ -z "$PUBLIC_KEY"  ]] && { err "Failed to read PublicKey.";              failed=1; }
+  [[ "$failed" -eq 1   ]] && return 1
 
   export UUID PRIVATE_KEY SHORT_ID PUBLIC_KEY
 
